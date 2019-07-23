@@ -25,25 +25,28 @@ class MyData:
     '''Download and store the NHL data.'''
 
     def __init__(self, sites, base):
-        '''Initialize MyData instance; ensure self.sites is a dict'''
-        self.sites = dict(sites)
+        '''Initialize MyData instance; self.sites is a tuple where 1st value
+        is the name of the selected NHL data option, 2nd value is the API
+        endpoint to pull the data from.'''
+        self.sites = tuple(sites)
         self.base = str(base)
 
     def pull(self):
         '''Download data from NHL site specified by self.sites.'''
 
-        for self.k in self.sites.keys():
-            self.endpoint = self.sites[self.k]
-            self.api = self.base + self.endpoint
-            print('Pulling data from: ' + self.api)
-            self.r = requests.get(self.api)
-            if self.r.status_code == 200:
-                print('Status: ' + str(self.r.status_code))
-                return self.r.json()
-            else:
-                self.r.raise_for_status()
-                sys.exit('Exiting after failing to pull data for ' + self.k)
-                return None
+        self.endpoint = self.sites[1]
+        self.api = self.base + self.endpoint
+        print('Pulling data from: ' + self.api)
+        self.r = requests.get(self.api)
+        if self.r.status_code == 200:
+            # successful request, return data
+            print('Status: ' + str(self.r.status_code))
+            return self.r.json()
+        else:
+            # print exception message since request failed
+            self.r.raise_for_status()
+            sys.exit('Exiting after failing to pull data for ' + self.k)
+            return None
 
     def store_data(self, json):
         '''Save the JSON data pulled from the NHL site.'''
@@ -62,9 +65,10 @@ class MyData:
 def argsetup():
     parser = argparse.ArgumentParser(description =
                 'Read in player/team data from the NHL\'s website.')
-    parser.add_argument('--teams', help='pull data about all the NHL teams',
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--teams', help='pull data about all the NHL teams',
                         action='store_true')
-    #parser.add_argument('--people', help='pull data about all NHL players',
+    #group.add_argument('--people', help='pull data about all NHL players',
     #                    action='store_true')
     a = parser.parse_args()
     return a
@@ -81,16 +85,18 @@ if __name__ == '__main__':
     # get command-line arguments
     args = argsetup()
 
-    # set API endpoints based on arguments; store in dictionary
-    #   key   : argument
-    #   value : API endpoint
-    nhl_args = {}
+    # set API endpoints based on argument; store in tuple
+    #  (a, b)
+    #    a : argument
+    #    b : API endpoint
+    #nhl_args = ()
     for arg in vars(args):
-        # check if argument is to be used
+        # check if argument was used (i.e., arg_check = True)
         arg_check = getattr(args, arg)
         if arg_check:
             temp = '/' + arg
-            nhl_args.update({arg:temp})
+            nhl_args = (arg, temp)
+            break
 
     # Initiate MyData class with command-line args
     d = MyData(nhl_args, nhl_base)
