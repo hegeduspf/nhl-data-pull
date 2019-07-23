@@ -1,4 +1,6 @@
 # nhl-data-pull
+***NOTE: THIS REPOSITORY IS STILL IN THE EARLY STAGES OF DEVELOPMENT!***
+---
 ## Description
 **Program:** nhl_data_pull.py
 
