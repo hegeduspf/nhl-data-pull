@@ -31,7 +31,7 @@ class MyData:
         self.sites = tuple(sites)
         self.base = str(base)
 
-    def pull(self):
+    def Pull(self):
         '''Download data from NHL site specified by self.sites.'''
 
         self.endpoint = self.sites[1]
@@ -48,7 +48,7 @@ class MyData:
             sys.exit('Exiting after failing to pull data for ' + self.k)
             return None
 
-    def store_data(self, json):
+    def Store_Data(self, json):
         '''Save the JSON data pulled from the NHL site.'''
 
         self.json = json
@@ -56,20 +56,48 @@ class MyData:
             if self.k != 'copyright':
                 # create a Pandas DataFrame from the NHL data
                 self.df = pd.DataFrame(self.json[self.k])
-
         # do some more data formatting      
         print(self.df)
         #print(self.json[self.k])
+        return self.df
+
+    def Parse_Teams(self, df):
+        '''Parse the NHL team data into a more manageable format for
+        database use.'''
+
+        self.df = df
+        for self.i in self.df.index:
+            for self.name in self.df.columns:
+                self.rec = self.df[self.name][self.i]
+                if isinstance(self.rec, list) == True or \
+                isinstance(self.rec, dict) == True:
+                    print(self.rec)
         return None
 
 def argsetup():
     parser = argparse.ArgumentParser(description =
                 'Read in player/team data from the NHL\'s website.')
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument('--teams', help='pull data about all the NHL teams',
-                        action='store_true')
-    #group.add_argument('--people', help='pull data about all NHL players',
-    #                    action='store_true')
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument('--teams', action='store_true',
+                       help='pull data about all the NHL teams')
+    group.add_argument('--players', action='store_true', dest='people',
+                       help='pull data about past & present NHL players')
+    group.add_argument('--conf', action='store_true', dest='conferences',
+                       help='pull data about NHL conferences')
+    group.add_argument('--div', action='store_true', dest='divisions',
+                       help='pull data about NHL divisions')
+    group.add_argument('--draft', action='store_true',
+                       help='pull data about previous NHL Entry Drafts')
+    group.add_argument('--prospects', action='store_true',
+                       help='pull data about NHL Entry Draft prospects')
+    group.add_argument('--game', action='store_true',
+                       help='pull data about past NHL games')
+    group.add_argument('--schedule', action='store_true',
+                       help='pull data related to the NHL schedule')
+    group.add_argument('--standings', action='store_true',
+                       help='pull data related to the NHL standings')
+    group.add_argument('--stats', action='store_true', dest='statTypes',
+                       help='return list of specific player stat types')
     a = parser.parse_args()
     return a
 
@@ -102,23 +130,12 @@ if __name__ == '__main__':
     d = MyData(nhl_args, nhl_base)
 
     # pull data from NHL site based on passed in arguments
-    nhl_out = d.pull()
+    nhl_out = d.Pull()
 
     # store the output
     if nhl_out:
-        d.store_data(nhl_out)
+        df = d.Store_Data(nhl_out)
+        if arg == 'teams':
+            d.Parse_Teams(df)
     else:
         sys.exit('No arguments provided for data pull...exiting!')
-
-    # rest of API endpoints...should eventually be set
-    # using command-line args
-    nhl_confs = nhl_base + '/conferences'
-    nhl_divs = nhl_base + '/divisions'
-    nhl_draft = nhl_base + '/draft'
-    nhl_prospect = nhl_draft + '/prospects'
-    nhl_game = nhl_base + '/game'
-    nhl_player = nhl_base + '/people'
-    nhl_schedule = nhl_base + '/schedule'
-    nhl_standings = nhl_base + '/standings'
-    nhl_stats = nhl_base + '/statTypes'
-
