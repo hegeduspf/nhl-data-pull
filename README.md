@@ -9,7 +9,7 @@
 **Current Version:** v1.0
 
 **Conventions:**
-*   PEP 8 (spaces not tabs)
+*   PEP 8 (spaces not tabs; leading _ on internal functions)
 *   Class method names are capitalized, while class data attributes are not.
     This is to avoid accidental name conflicts resulting in a data attribute
     overriding a method attribute.
