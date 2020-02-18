@@ -21,6 +21,7 @@ import pdb
 #import matplotlib.pyplot as plt
 
 from configparser import ConfigParser
+from collections import OrderedDict
 from pprint import pprint
 
 def argsetup():
@@ -39,12 +40,19 @@ def database_connect():
     Setup connection to the PostgreSQL database and 
     '''
 
-    connection = psycopg2.connect(
-                user = db_user,
-                password = db_passwd,
-                host = db_host,
-                database = db_name
-    )
+    connection = None
+    try:
+        # establish database connection
+        connection = psycopg2.connect(
+                    user = db_user,
+                    password = db_passwd,
+                    host = db_host,
+                    database = db_name
+        )
+    except psycopg2.DatabaseError as e:
+        # Report error
+        pprint(e)
+        sys.exit()
 
     return connection
 
@@ -75,20 +83,28 @@ def request_data(url):
 def _teams(url):
     '''
     Overall function to get full dataset on all NHL teams, then parse down
-    data to only what is required for our database.
+    data to only what is required and store in our database.
     '''
 
     # actually get team data from NHL site
     team_dataset = request_data(url)
+
     # pull list of team data from returned JSON object
     for key in team_dataset.keys():
         if key == 'teams':
             team_list = team_dataset[key]
+
     # can now cycle thru each individual team
+    final_teams = []
     for _ in team_list:
-        # extract only some of the provided team data for each team
-        # NOTE: Store data immediately for each team? Return list of data?...
-        parse_teams(_)
+        # extract only some of the provided team data for each team; append dict that is returned to final data list
+        # team = parse_teams(_)
+        insert_cmd = (
+            f"INSERT INTO teams (id, name, abbreviation, conf_id, division_id," 
+            f" franchise_id, active)"
+            f"VALUES ({parse_teams(_)})"
+        )
+        store_team(db_connect, insert_cmd)
 
 def parse_teams(data):
     '''
@@ -103,9 +119,11 @@ def parse_teams(data):
 
     Inputted dataset is a dict specifying info for one specific NHL team.
 
-    Return value TBD...may just store in database straight away...maybe call
-    external function to convert to Pandas DataFrame and store in DB?
+    Returns a dict of generic header names as keys and team-specific data as values.
     '''
+
+    # setup an OrderedDict that will become our return value
+    d = OrderedDict()
 
     # pdb.set_trace()
     # set variables for requisite data to pull (using inputted dict)
@@ -117,14 +135,43 @@ def parse_teams(data):
     franchise_id = data['franchise']['franchiseId']
     active = data['active']
 
-    # store team data using database_connect()
-    #    -new function that does something like conn = database_connect()
-    #       to create a new connection. want to be able to do that easily so
-    #       we can replicate it quickly and easily
+    # fill OrderedDict with variables
+    # d = {
+    #     'team_id': team_id,
+    #     'team_name': team_name,
+    #     'abbreviation': abbreviation,
+    #     'conference_id': conference_id,
+    #     'division_id': division_id,
+    #     'franchise_id': franchise_id,
+    #     'active': active
+    # }
+    #pprint('%s (%s): %s' % (team_name, abbreviation, team_id))
+    #pprint('Conf: %s ; Div: %s ; Franchise: %s ; Active? %s' %
+    #            (conference_id, division_id, franchise_id, active))
 
-    pprint('%s (%s): %s' % (team_name, abbreviation, team_id))
-    pprint('Conf: %s ; Div: %s ; Franchise: %s ; Active? %s' %
-                (conference_id, division_id, franchise_id, active))
+    return team_id, team_name, abbreviation, conference_id, division_id, \
+        franchise_id, active
+    
+
+def store_team(conn, cmd):
+    '''
+    Create an SQL query using inputted dict of team data. Execute the query using an established database connection.
+
+    Inputted data is a dict containing the team data to be stored. Should 
+    have already been parsed down from raw JSON output we initially obtain 
+    from NHL API.
+    '''
+
+    cursor = conn.cursor()
+    try:
+        cursor.execute(cmd)
+        conn.commit()
+    except (Exception, psycopg2.DatabaseError) as e:
+        pprint(f"ERROR: {e}")
+        conn.rollback()
+        cursor.close()
+        return 1
+    cursor.close()
 
 #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
@@ -148,6 +195,9 @@ if __name__ == '__main__':
     db_passwd = config['DATABASE']['PASSWORD']
     db_host = config['DATABASE']['CONNECTION']
     db_name = config['DATABASE']['DB_NAME']
+
+    # open database connection using config file settings
+    db_connect = database_connect()
 
     # initiate data getting/parsing functions
     _teams(nhl_teams)
