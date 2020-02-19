@@ -1,12 +1,14 @@
 '''
-Description: Pull user-specified data from the NHL-records site.
+Description: Store team/player data from the NHL website in a database.
 
-Return player- and team-related data by accessing the NHL website's
-API.
+This program pulls team and player data from the NHL website's publicly
+available API. It uses a configuration file read in from the command line
+to request the data from the API and establish a connection to the requisite
+database.
 '''
 
 __version__ = '2.0'
-__title__ = 'nhl_pull_data'
+__title__ = 'nhl_data_pull'
 __author__ = 'Paul Hegedus'
 
 import os
@@ -16,7 +18,6 @@ import psycopg2
 import argparse
 import pandas as pd
 import pdb
-#import subprocess
 #import numpy as np
 #import matplotlib.pyplot as plt
 
@@ -37,7 +38,10 @@ def argsetup():
 
 def database_connect():
     '''
-    Setup connection to the PostgreSQL database and 
+    Setup connection to a PostgreSQL database using psycopg2 package.
+
+    Database credentials are read in from the configuration file passed to
+    the progam and set in main.
     '''
 
     connection = None
@@ -77,33 +81,32 @@ def request_data(url):
     else:
         # print exception message since request failed
         r.raise_for_status()
-        sys.exit('Exiting after failing to pull data from %s' % url)
+        sys.exit(f"Exiting after failing to pull data from {url}")
         return None
 
 def _teams(url):
     '''
-    Overall function to get full dataset on all NHL teams, then parse down
+    Overall function to get complete dataset on all NHL teams, then parse down
     data to only what is required and store in our database.
     '''
 
-    # actually get team data from NHL site
+    # get raw team data from NHL site
     team_dataset = request_data(url)
 
-    # pull list of team data from returned JSON object
+    # pull list of team data from returned JSON object/ignore copyright info
     for key in team_dataset.keys():
         if key == 'teams':
             team_list = team_dataset[key]
 
     # can now cycle thru each individual team
-    final_teams = []
     for _ in team_list:
-        # extract only some of the provided team data for each team; append dict that is returned to final data list
-        # team = parse_teams(_)
+        #pdb.set_trace()
         insert_cmd = (
             f"INSERT INTO teams (id, name, abbreviation, conf_id, division_id," 
             f" franchise_id, active)"
-            f"VALUES ({parse_teams(_)})"
+            f" VALUES {parse_teams(_)}"
         )
+        # load parsed team data into database using established connection
         store_team(db_connect, insert_cmd)
 
 def parse_teams(data):
@@ -118,12 +121,7 @@ def parse_teams(data):
         - active
 
     Inputted dataset is a dict specifying info for one specific NHL team.
-
-    Returns a dict of generic header names as keys and team-specific data as values.
     '''
-
-    # setup an OrderedDict that will become our return value
-    d = OrderedDict()
 
     # pdb.set_trace()
     # set variables for requisite data to pull (using inputted dict)
@@ -135,19 +133,11 @@ def parse_teams(data):
     franchise_id = data['franchise']['franchiseId']
     active = data['active']
 
-    # fill OrderedDict with variables
-    # d = {
-    #     'team_id': team_id,
-    #     'team_name': team_name,
-    #     'abbreviation': abbreviation,
-    #     'conference_id': conference_id,
-    #     'division_id': division_id,
-    #     'franchise_id': franchise_id,
-    #     'active': active
-    # }
-    #pprint('%s (%s): %s' % (team_name, abbreviation, team_id))
-    #pprint('Conf: %s ; Div: %s ; Franchise: %s ; Active? %s' %
-    #            (conference_id, division_id, franchise_id, active))
+    # pprint(f"{team_name} ({abbreviation}): {team_id}")
+    # pprint(
+    #     f"Conference: {conference_id}; Division: {division_id}; "
+    #     f"Franchise: {franchise_id}; Active: {active}"
+    # )
 
     return team_id, team_name, abbreviation, conference_id, division_id, \
         franchise_id, active
@@ -155,11 +145,11 @@ def parse_teams(data):
 
 def store_team(conn, cmd):
     '''
-    Create an SQL query using inputted dict of team data. Execute the query using an established database connection.
+    Execute an SQL query using an established database connection.
 
-    Inputted data is a dict containing the team data to be stored. Should 
-    have already been parsed down from raw JSON output we initially obtain 
-    from NHL API.
+    conn -> preexisting database connection [(i.e. a connection setup using 
+        nhl_data_pull.database_connect()]
+    cmd  -> SQL command to execute
     '''
 
     cursor = conn.cursor()
@@ -176,9 +166,6 @@ def store_team(conn, cmd):
 #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 if __name__ == '__main__':
-    # set variable with curr dir
-    cwd = os.getcwd()
-
     # get command-line arguments
     args = argsetup()
     conf_file = args.configf
@@ -190,7 +177,8 @@ if __name__ == '__main__':
     # get API endpoints from config file
     nhl_teams = config['LINKS']['teams']
     nhl_players = config['LINKS']['players']
-    # get database info from config file
+
+    # get database credentials from config file
     db_user = config['DATABASE']['USER']
     db_passwd = config['DATABASE']['PASSWORD']
     db_host = config['DATABASE']['CONNECTION']
@@ -199,7 +187,5 @@ if __name__ == '__main__':
     # open database connection using config file settings
     db_connect = database_connect()
 
-    # initiate data getting/parsing functions
+    # initiate NHL team data getting
     _teams(nhl_teams)
-
-    # store the output
