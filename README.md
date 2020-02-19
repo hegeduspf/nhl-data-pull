@@ -6,7 +6,7 @@
 
 **Author:** Paul Hegedus
 
-**Current Version:** v1.0
+**Current Version:** v2.0
 
 **Conventions:**
 *   PEP 8 (spaces not tabs; leading _ on internal functions)
