@@ -13,8 +13,8 @@ CREATE TABLE "teams" (
     "id" int PRIMARY KEY,
     "name" varchar,
     "abbreviation" char(3),
-    "conf_id" int UNIQUE NOT NULL,
-    "division_id" int UNIQUE NOT NULL,
+    "conf_id" int NOT NULL,
+    "division_id" int NOT NULL,
     "franchise_id" int UNIQUE NOT NULL,
     "active" boolean
 );
