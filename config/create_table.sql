@@ -2,9 +2,9 @@
 PostgreSQL table. */
 
 /* Drop Tables
-DROP TABLE teams;
-DROP TABLE players;
 DROP TABLE team_players;
+DROP TABLE players;
+DROP TABLE teams;
 */
 
 /* Initial table creation */
