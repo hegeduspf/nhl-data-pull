@@ -117,7 +117,7 @@ def _teams(url):
         - division_id
         - franchise_id
         - active
-'''
+    '''
 
     # get raw team data from NHL site
     team_dataset = request_data(url)
@@ -198,7 +198,7 @@ def _players(url, team_ids):
                     dataset = dataset[key][0]
 
             # parse out specific data we need for the database
-            id = dataset['id']
+            player_id = dataset['id']
             name = dataset['fullName']
             link = dataset['link']
             age = dataset['currentAge']
@@ -209,19 +209,28 @@ def _players(url, team_ids):
             position_code = dataset['primaryPosition']['abbreviation']
             position_name = dataset['primaryPosition']['name']
             position_type = dataset['primaryPosition']['type']
+            season = '20192020'
 
             # pdb.set_trace()
-            insert_cmd = (
+            players_cmd = (
                 f"INSERT INTO players (id, full_name, link, current_age, "
                 f"nationality, active, rookie, shoots_catches, "
                 f"position_code, position_name, position_type) VALUES "
-                f"({id}, $${name}$$, $${link}$$, {age}, $${nationality}$$, "
-                f"{active}, {rookie}, $${shoots_catches}$$, "
-                f"$${position_code}$$, $${position_name}$$, "
+                f"({player_id}, $${name}$$, $${link}$$, {age}, "
+                f"$${nationality}$$, {active}, {rookie}, $${shoots_catches}$$,"
+                f" $${position_code}$$, $${position_name}$$, "
                 f"$${position_type}$$)"
             )
+            team_players_cmd = (
+                f"INSERT INTO team_players (team_id, player_id, season, "
+                f"active) VALUES ({team_id}, {player_id}, $${season}$$, "
+                f"{active})"
+            )
+
             # load parsed player data into database
-            sql_insert(db_connect, insert_cmd)
+            sql_insert(db_connect, players_cmd)
+            sql_insert(db_connect, team_players_cmd)
+            
         pprint(f'>> Completed data pull for team {team_id}...')
 
 def parse_roster(roster):
@@ -239,6 +248,14 @@ def parse_roster(roster):
         players_list.append(_['person']['link'])
     
     return players_list
+
+def _team_players():
+    '''
+    Once Team & Player data is loaded into database, create a record in
+    team_players table using combined data.
+    '''
+
+    # use database connection to get 
 
 #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
