@@ -25,8 +25,6 @@ CREATE TABLE "players" (
     "link" varchar,
     "current_age" int,
     "nationality" char(3),
-    "height" varchar,
-    "weight" int,
     "active" boolean,
     "rookie" boolean,
     "shoots_catches" char(1),
@@ -38,6 +36,8 @@ CREATE TABLE "players" (
 CREATE TABLE "team_players" (
     "team_id" int,
     "player_id" int,
+    "season" char(8),
+    "active" boolean,
     PRIMARY KEY ("team_id", "player_id")
 );
 
