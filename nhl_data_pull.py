@@ -84,6 +84,26 @@ def request_data(url):
         sys.exit(f"Exiting after failing to pull data from {url}")
         return None
 
+def sql_insert(conn, cmd):
+    '''
+    Execute an SQL insert command using an established database connection.
+
+    conn -> preexisting database connection [(i.e. a connection setup using 
+        nhl_data_pull.database_connect()]
+    cmd  -> SQL insert command to execute
+    '''
+
+    cursor = conn.cursor()
+    try:
+        cursor.execute(cmd)
+        conn.commit()
+    except (Exception, psycopg2.DatabaseError) as e:
+        pprint(f"ERROR: {e}")
+        conn.rollback()
+        cursor.close()
+        return 1
+    cursor.close()
+
 def _teams(url):
     '''
     Overall function to get complete dataset on all NHL teams, then parse down
@@ -107,7 +127,7 @@ def _teams(url):
             f" VALUES {parse_teams(_)}"
         )
         # load parsed team data into database using established connection
-        store_team(db_connect, insert_cmd)
+        sql_insert(db_connect, insert_cmd)
 
 def parse_teams(data):
     '''
@@ -143,25 +163,110 @@ def parse_teams(data):
         franchise_id, active
     
 
-def store_team(conn, cmd):
+def _players(url, team_ids):
     '''
-    Execute an SQL query using an established database connection.
-
-    conn -> preexisting database connection [(i.e. a connection setup using 
-        nhl_data_pull.database_connect()]
-    cmd  -> SQL command to execute
+    overall function to get complete dataset of NHL players, then parse down 
+    data to what is required and store in our database.
     '''
 
-    cursor = conn.cursor()
-    try:
+    # have to get player ids and append each id to player api endpoint
+    #   - get player ids from each team's roster api endpoint 
+    #     '{nhl_teams}/{team_id}/roster'
+
+    # get roster from each team in database
+    if team_ids == 'ALL':
+        team_list = []
+        cmd = 'SELECT id FROM teams'
+        cursor = db_connect.cursor()
         cursor.execute(cmd)
-        conn.commit()
-    except (Exception, psycopg2.DatabaseError) as e:
-        pprint(f"ERROR: {e}")
-        conn.rollback()
-        cursor.close()
-        return 1
-    cursor.close()
+        # create list of team ids
+        for _ in cursor.fetchall():
+            team_list.append(_[0])
+    else:
+        team_list = team_ids.split()
+    
+    # pdb.set_trace()
+    # get roster of players from each team
+    for id in team_list:
+        # create url to connect to api
+        team_roster = f"{nhl_teams}/{id}/roster"
+        # connect to api
+        player_dataset = request_data(team_roster)
+        # pull list of players from returned JSON object containing roster
+        for key in player_dataset.keys():
+            if key == 'roster':
+                player_dataset = player_dataset[key]
+                player_list = parse_roster(player_dataset)
+                for _ in player_list:
+                    # pdb.set_trace()
+                    insert_cmd = (
+                        f"INSERT INTO players (id, full_name, link, "
+                        f"current_age, nationality, active, rookie, "
+                        f"shoots_catches, position_code, position_name, "
+                        f"position_type) VALUES {parse_players(_)}"
+                    )
+                    # load parsed player data into database
+                    sql_insert(db_connect, insert_cmd)
+
+def parse_roster(roster):
+    '''
+    Sort through an individual NHL team's roster to get the link to the API
+    endpoint where we will pull that player's specific data.
+
+    Inputted data is a list dictionaries where each dict contains high level
+    data about one player - this is where we will find the API endpoint.
+    '''
+
+    players_list = []
+    for _ in roster:
+        # compile a list of each player's individual API endpoint
+        players_list.append(_['person']['link'])
+    
+    return players_list
+
+def parse_players(endpoint):
+    '''
+    Pull the data we need from an individual NHL player's API endpoint.
+    Required data:
+        - id                    
+        - full_name             - rookie
+        - link                  - shoots_catches
+        - current_age           - position_code
+        - nationality           - position_name
+        - active                - position_type
+    '''
+
+    # generate player's link to NHL API
+    url = f"{nhl_site}{endpoint}"
+
+    # get player's data
+    dataset = request_data(url)
+    for key in dataset.keys():
+        if key == 'people':
+            dataset = dataset[key][0]
+
+    # parse out specific data we need for the database
+    id = dataset['id']
+    name = dataset['fullName']
+    link = dataset['link']
+    age = dataset['currentAge']
+    nationality = dataset['nationality']
+    active = dataset['active']
+    rookie = dataset['rookie']
+    shoots_catches = dataset['shootsCatches']
+    position_code = dataset['primaryPosition']['abbreviation']
+    position_name = dataset['primaryPosition']['name']
+    position_type = dataset['primaryPosition']['type']
+
+    # pprint(
+    #     f"{name} (Age: {age}; ID: {id}): {position_type} - {position_name}; "
+    #     f"Shoots: {shoots_catches}; Active: {active}; Age: {age}; "
+    #     f"Country: {nationality}"
+    # )
+
+    return id, name, link, age, nationality, active, rookie, shoots_catches, \
+        position_code, position_name, position_type
+
 
 #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
@@ -175,8 +280,14 @@ if __name__ == '__main__':
     config.read(conf_file)
 
     # get API endpoints from config file
+    nhl_site = config['LINKS']['site']
+    nhl_base = config['LINKS']['base']
     nhl_teams = config['LINKS']['teams']
     nhl_players = config['LINKS']['players']
+    nhl_teams_list = config['TEAMS']['LIST']
+    nhl_players_teamIds = config['PLAYERS']['TEAM_ID']
+    nhl_players_list = config['PLAYERS']['LIST']
+    
 
     # get database credentials from config file
     db_user = config['DATABASE']['USER']
@@ -187,5 +298,14 @@ if __name__ == '__main__':
     # open database connection using config file settings
     db_connect = database_connect()
 
-    # initiate NHL team data getting
-    _teams(nhl_teams)
+    # initiate NHL team data getting if told by config file
+    if nhl_teams_list != 'NONE':
+        pprint('Pulling NHL Team data from website and storing in database...')
+        _teams(nhl_teams)
+
+    # initiate NHL player data getting
+    if nhl_players_list != 'NONE':
+        _players(nhl_players, nhl_players_teamIds)
+
+    # close database connection
+    db_connect.close()
