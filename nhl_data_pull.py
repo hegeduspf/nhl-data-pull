@@ -108,7 +108,16 @@ def _teams(url):
     '''
     Overall function to get complete dataset on all NHL teams, then parse down
     data to only what is required and store in our database.
-    '''
+        
+    Required data:
+        - team_id
+        - name
+        - abbreviation
+        - conference_id
+        - division_id
+        - franchise_id
+        - active
+'''
 
     # get raw team data from NHL site
     team_dataset = request_data(url)
@@ -119,49 +128,24 @@ def _teams(url):
             team_list = team_dataset[key]
 
     # can now cycle thru each individual team
-    for _ in team_list:
+    for team_data in team_list:
         #pdb.set_trace()
+        team_id = team_data['id']
+        team_name = team_data['name']
+        abbreviation = team_data['abbreviation']
+        conference_id = team_data['conference']['id']
+        division_id = team_data['division']['id']
+        franchise_id = team_data['franchise']['franchiseId']
+        active = team_data['active']
+
         insert_cmd = (
             f"INSERT INTO teams (id, name, abbreviation, conf_id, division_id," 
-            f" franchise_id, active)"
-            f" VALUES {parse_teams(_)}"
+            f" franchise_id, active) VALUES ({team_id}, $${team_name}$$, "
+            f"$${abbreviation}$$, {conference_id}, {division_id}, "
+            f"{franchise_id}, {active})"
         )
         # load parsed team data into database using established connection
         sql_insert(db_connect, insert_cmd)
-
-def parse_teams(data):
-    '''
-    Parse the NHL team dataset to get data required for database, which is the following:
-        - team_id
-        - name
-        - abbreviation
-        - conference_id
-        - division_id
-        - franchise_id
-        - active
-
-    Inputted dataset is a dict specifying info for one specific NHL team.
-    '''
-
-    # pdb.set_trace()
-    # set variables for requisite data to pull (using inputted dict)
-    team_id = data['id']
-    team_name = data['name']
-    abbreviation = data['abbreviation']
-    conference_id = data['conference']['id']
-    division_id = data['division']['id']
-    franchise_id = data['franchise']['franchiseId']
-    active = data['active']
-
-    # pprint(f"{team_name} ({abbreviation}): {team_id}")
-    # pprint(
-    #     f"Conference: {conference_id}; Division: {division_id}; "
-    #     f"Franchise: {franchise_id}; Active: {active}"
-    # )
-
-    return team_id, team_name, abbreviation, conference_id, division_id, \
-        franchise_id, active
-    
 
 def _players(url, team_ids):
     '''
