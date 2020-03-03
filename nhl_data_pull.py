@@ -165,13 +165,17 @@ def parse_teams(data):
 
 def _players(url, team_ids):
     '''
-    overall function to get complete dataset of NHL players, then parse down 
+    Overall function to get complete dataset of NHL players, then parse down 
     data to what is required and store in our database.
-    '''
 
-    # have to get player ids and append each id to player api endpoint
-    #   - get player ids from each team's roster api endpoint 
-    #     '{nhl_teams}/{team_id}/roster'
+    Data we need from an individual NHL player's API endpoint:
+        - id                    
+        - full_name             - rookie
+        - link                  - shoots_catches
+        - current_age           - position_code
+        - nationality           - position_name
+        - active                - position_type
+    '''
 
     # get roster from each team in database
     if team_ids == 'ALL':
@@ -188,6 +192,7 @@ def _players(url, team_ids):
     # pdb.set_trace()
     # get roster of players from each team
     for id in team_list:
+        pprint(f'> Pulling data for team ID {id}...')
         # create url to connect to api
         team_roster = f"{nhl_teams}/{id}/roster"
         # connect to api
@@ -196,17 +201,44 @@ def _players(url, team_ids):
         for key in player_dataset.keys():
             if key == 'roster':
                 player_dataset = player_dataset[key]
-                player_list = parse_roster(player_dataset)
-                for _ in player_list:
-                    # pdb.set_trace()
-                    insert_cmd = (
-                        f"INSERT INTO players (id, full_name, link, "
-                        f"current_age, nationality, active, rookie, "
-                        f"shoots_catches, position_code, position_name, "
-                        f"position_type) VALUES {parse_players(_)}"
-                    )
-                    # load parsed player data into database
-                    sql_insert(db_connect, insert_cmd)
+        
+        player_list = parse_roster(player_dataset)
+        for endpoint in player_list:
+            # generate player's link to NHL API
+            url = f"{nhl_site}{endpoint}"
+
+            # get player's data
+            dataset = request_data(url)
+            for key in dataset.keys():
+                if key == 'people':
+                    dataset = dataset[key][0]
+
+            # parse out specific data we need for the database
+            id = dataset['id']
+            name = dataset['fullName']
+            link = dataset['link']
+            age = dataset['currentAge']
+            nationality = dataset['nationality']
+            active = dataset['active']
+            rookie = dataset['rookie']
+            shoots_catches = dataset['shootsCatches']
+            position_code = dataset['primaryPosition']['abbreviation']
+            position_name = dataset['primaryPosition']['name']
+            position_type = dataset['primaryPosition']['type']
+
+            # pdb.set_trace()
+            insert_cmd = (
+                f"INSERT INTO players (id, full_name, link, current_age, "
+                f"nationality, active, rookie, shoots_catches, "
+                f"position_code, position_name, position_type) VALUES "
+                f"({id}, $${name}$$, $${link}$$, {age}, $${nationality}$$, "
+                f"{active}, {rookie}, $${shoots_catches}$$, "
+                f"$${position_code}$$, $${position_name}$$, "
+                f"$${position_type}$$)"
+            )
+            # load parsed player data into database
+            sql_insert(db_connect, insert_cmd)
+        pprint(f'>> Completed data pull for team {id}...')
 
 def parse_roster(roster):
     '''
@@ -223,50 +255,6 @@ def parse_roster(roster):
         players_list.append(_['person']['link'])
     
     return players_list
-
-def parse_players(endpoint):
-    '''
-    Pull the data we need from an individual NHL player's API endpoint.
-    Required data:
-        - id                    
-        - full_name             - rookie
-        - link                  - shoots_catches
-        - current_age           - position_code
-        - nationality           - position_name
-        - active                - position_type
-    '''
-
-    # generate player's link to NHL API
-    url = f"{nhl_site}{endpoint}"
-
-    # get player's data
-    dataset = request_data(url)
-    for key in dataset.keys():
-        if key == 'people':
-            dataset = dataset[key][0]
-
-    # parse out specific data we need for the database
-    id = dataset['id']
-    name = dataset['fullName']
-    link = dataset['link']
-    age = dataset['currentAge']
-    nationality = dataset['nationality']
-    active = dataset['active']
-    rookie = dataset['rookie']
-    shoots_catches = dataset['shootsCatches']
-    position_code = dataset['primaryPosition']['abbreviation']
-    position_name = dataset['primaryPosition']['name']
-    position_type = dataset['primaryPosition']['type']
-
-    # pprint(
-    #     f"{name} (Age: {age}; ID: {id}): {position_type} - {position_name}; "
-    #     f"Shoots: {shoots_catches}; Active: {active}; Age: {age}; "
-    #     f"Country: {nationality}"
-    # )
-
-    return id, name, link, age, nationality, active, rookie, shoots_catches, \
-        position_code, position_name, position_type
-
 
 #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
@@ -305,6 +293,7 @@ if __name__ == '__main__':
 
     # initiate NHL player data getting
     if nhl_players_list != 'NONE':
+        pprint('Pulling NHL Player data and storing in database...')
         _players(nhl_players, nhl_players_teamIds)
 
     # close database connection
