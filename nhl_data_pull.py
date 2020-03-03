@@ -175,10 +175,10 @@ def _players(url, team_ids):
     
     # pdb.set_trace()
     # get roster of players from each team
-    for id in team_list:
-        pprint(f'> Pulling data for team ID {id}...')
+    for team_id in team_list:
+        pprint(f'> Pulling data for team ID {team_id}...')
         # create url to connect to api
-        team_roster = f"{nhl_teams}/{id}/roster"
+        team_roster = f"{nhl_teams}/{team_id}/roster"
         # connect to api
         player_dataset = request_data(team_roster)
         # pull list of players from returned JSON object containing roster
@@ -222,7 +222,7 @@ def _players(url, team_ids):
             )
             # load parsed player data into database
             sql_insert(db_connect, insert_cmd)
-        pprint(f'>> Completed data pull for team {id}...')
+        pprint(f'>> Completed data pull for team {team_id}...')
 
 def parse_roster(roster):
     '''
