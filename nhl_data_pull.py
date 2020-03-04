@@ -13,6 +13,7 @@ __author__ = 'Paul Hegedus'
 
 import os
 import sys
+import logging
 import requests
 import psycopg2
 import argparse
@@ -22,8 +23,29 @@ import pdb
 #import matplotlib.pyplot as plt
 
 from configparser import ConfigParser
-from collections import OrderedDict
+from datetime import datetime
 from pprint import pprint
+
+def open_logs():
+    '''
+    Create a log file and setup parameters.
+    '''
+    
+    # create log filename with timestamp
+    now = datetime.now()
+    date_format = now.strftime("%d%b%y_%H%M%S")
+    log_file = f"/home/phegedus/LOGS/nhl_data_pull_{date_format}.log"
+
+    # create and configure logger
+    logging.basicConfig(filename=log_file,
+                        format='[%(asctime)s] %(message)s',
+                        filemode='w')
+    logger = logging.getLogger()
+
+    # set the threshold of logger to DEBUG
+    logger.setLevel(logging.DEBUG)
+
+    return logger
 
 def argsetup():
     '''
@@ -44,6 +66,7 @@ def database_connect():
     the progam and set in main.
     '''
 
+    log_file.info('Establishing connecting to the database...')
     connection = None
     try:
         # establish database connection
@@ -53,9 +76,10 @@ def database_connect():
                     host = db_host,
                     database = db_name
         )
+        log_file.info('Database connection successfully established.')
     except psycopg2.DatabaseError as e:
         # Report error
-        pprint(e)
+        log_file.error(e)
         sys.exit()
 
     return connection
@@ -74,14 +98,17 @@ def request_data(url):
     pair after the copyright info.
     '''
 
+    log_file.info(f"Requesting data from {url}...")
     r = requests.get(url)
     if r.status_code == 200:
         # successful request, return data
+        log_file.info('Successfully pulled data from provided URL...')
         return r.json()
     else:
         # print exception message since request failed
         r.raise_for_status()
-        sys.exit(f"Exiting after failing to pull data from {url}")
+        log_file.info('Exiting after failing to pull data from url')
+        sys.exit(1)
         return None
 
 def sql_insert(conn, cmd):
@@ -98,11 +125,12 @@ def sql_insert(conn, cmd):
         cursor.execute(cmd)
         conn.commit()
     except (Exception, psycopg2.DatabaseError) as e:
-        pprint(f"ERROR: {e}")
+        log_file.error(f"ERROR: {e}")
         conn.rollback()
         cursor.close()
         return 1
     cursor.close()
+    return 0
 
 def _teams(url):
     '''
@@ -138,6 +166,8 @@ def _teams(url):
         franchise_id = team_data['franchise']['franchiseId']
         active = team_data['active']
 
+        log_file.info(f"> Loading NHL Team data for {team_name} ({team_id})...")
+
         insert_cmd = (
             f"INSERT INTO teams (id, name, abbreviation, conf_id, division_id," 
             f" franchise_id, active) VALUES ({team_id}, $${team_name}$$, "
@@ -145,7 +175,10 @@ def _teams(url):
             f"{franchise_id}, {active})"
         )
         # load parsed team data into database using established connection
-        sql_insert(db_connect, insert_cmd)
+        status = sql_insert(db_connect, insert_cmd)
+        if status == 0: 
+            log_file.info(f">> Successfully uploaded data for {team_name} "
+                f"({team_id})...")
 
 def _players(url, team_ids):
     '''
@@ -164,19 +197,19 @@ def _players(url, team_ids):
     # get roster from each team in database
     if team_ids == 'ALL':
         team_list = []
-        cmd = 'SELECT id FROM teams'
+        cmd = 'SELECT id, name FROM teams'
         cursor = db_connect.cursor()
         cursor.execute(cmd)
         # create list of team ids
-        for _ in cursor.fetchall():
-            team_list.append(_[0])
+        team_list = cursor.fetchall()
     else:
         team_list = team_ids.split()
     
     # pdb.set_trace()
     # get roster of players from each team
-    for team_id in team_list:
-        pprint(f'> Pulling data for team ID {team_id}...')
+    for team_id, team_name in team_list:
+        log_file.info(f"> Pulling NHL player data from {team_name} "
+            f"({team_id})...")
         # create url to connect to api
         team_roster = f"{nhl_teams}/{team_id}/roster"
         # connect to api
@@ -228,10 +261,19 @@ def _players(url, team_ids):
             )
 
             # load parsed player data into database
-            sql_insert(db_connect, players_cmd)
-            sql_insert(db_connect, team_players_cmd)
-            
-        pprint(f'>> Completed data pull for team {team_id}...')
+            player_status = sql_insert(db_connect, players_cmd)
+            team_players_status = sql_insert(db_connect, team_players_cmd)
+
+            # log results
+            if player_status == 0:
+                log_file.info(f">> Successfully uploaded data for {name} "
+                    f"({player_id}) to players table...")
+            if team_players_status == 0:
+                log_file.info(f">>> Uploaded data for {name} ({player_id}) "
+                    f"to team_players table...")
+
+        log_file.info(f">> Completed player data pull for {team_name} "
+            f"({team_id})...")
 
 def parse_roster(roster):
     '''
@@ -249,14 +291,6 @@ def parse_roster(roster):
     
     return players_list
 
-def _team_players():
-    '''
-    Once Team & Player data is loaded into database, create a record in
-    team_players table using combined data.
-    '''
-
-    # use database connection to get 
-
 #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 if __name__ == '__main__':
@@ -264,11 +298,20 @@ if __name__ == '__main__':
     args = argsetup()
     conf_file = args.configf
 
+    # setup and test logging
+    log_file = open_logs()
+    now = datetime.now().strftime("%d%b%Y %H:%M:%S")
+    try:
+        log_file.info(f"Starting NHL Data Pull at {now}...")
+    except:
+        sys.exit(f"Logging failed to setup...exiting at time {now}...")
+
     # read in configuration file
     config = ConfigParser()
     config.read(conf_file)
 
-    # get API endpoints from config file
+    # setup environment variables from config file
+    log_file.info('Setting up environment variables from config file...')
     nhl_site = config['LINKS']['site']
     nhl_base = config['LINKS']['base']
     nhl_teams = config['LINKS']['teams']
@@ -279,6 +322,7 @@ if __name__ == '__main__':
     
 
     # get database credentials from config file
+    log_file.info('Setting database credentials from config file...')
     db_user = config['DATABASE']['USER']
     db_passwd = config['DATABASE']['PASSWORD']
     db_host = config['DATABASE']['CONNECTION']
@@ -289,12 +333,13 @@ if __name__ == '__main__':
 
     # initiate NHL team data getting if told by config file
     if nhl_teams_list != 'NONE':
-        pprint('Pulling NHL Team data from website and storing in database...')
+        log_file.info('Pulling NHL Team data from website and storing in '
+            'database...')
         _teams(nhl_teams)
 
     # initiate NHL player data getting
     if nhl_players_list != 'NONE':
-        pprint('Pulling NHL Player data and storing in database...')
+        log_file.info('Pulling NHL Player data and storing in database...')
         _players(nhl_players, nhl_players_teamIds)
 
     # close database connection
