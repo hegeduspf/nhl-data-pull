@@ -41,7 +41,38 @@ CREATE TABLE "team_players" (
     PRIMARY KEY ("team_id", "player_id")
 );
 
+CREATE TABLE "skater_season_stats" (
+    "player_id" int PRIMARY KEY,
+    "team_id" int,
+    "season" char(8),
+    "time_on_ice" varchar,
+    "games" int,
+    "assists" int,
+    "goals" int,
+    "pim" int,
+    "shots" int,
+    "hits" int,
+    "pp_goals" int,
+    "pp_points" int,
+    "pp_toi" varchar,
+    "even_toi" varchar,
+    "faceoff_pct" float8,
+    "shot_pct" float8,
+    "gw_goals" int,
+    "ot_goals" int,
+    "sh_goals" int,
+    "sh_points" int,
+    "sh_toi" varchar,
+    "blocked_shots" int,
+    "plus_minus" int,
+    "points" int,
+    "shifts" int,
+    "sequence" int
+);
+
 /* Add foreign key references */
 
 ALTER TABLE "team_players" ADD FOREIGN KEY ("team_id") REFERENCES "teams" ("id");
 ALTER TABLE "team_players" ADD FOREIGN KEY ("player_id") REFERENCES "players" ("id");
+ALTER TABLE "skater_season_stats" ADD FOREIGN KEY ("player_id") REFERENCES "team_players" ("player_id");
+ALTER TABLE "skater_season_stats" ADD FOREIGN KEY ("team_id") REFERENCES "team_players" ("team_id");

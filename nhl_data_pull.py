@@ -291,6 +291,132 @@ def parse_roster(roster):
     
     return players_list
 
+def _skaterStats_yearByYear():
+    '''
+    Pull year-by-year statistics for a player's NHL seasons.
+    '''
+
+    if stats_playersByYear == 'ALL':
+        # get stats for all skaters in team_players table
+        player_list = []
+        # make sure we don't include goalies
+        cmd = (
+            f"SELECT DISTINCT player_id FROM team_players "
+            f"EXCEPT "
+            f"SELECT id FROM players WHERE position_code = 'G'"
+        )
+        cursor = db_connect.cursor()
+        cursor.execute(cmd)
+        for id in cursor.fetchall():
+            player_list.append(id[0])
+    else:
+        # get stats for player IDs listed in config file
+        player_list = stats_playersByYear.split()
+    
+    for player_id in player_list:
+        # create a link to pull yearByYear stats for each player in list
+        link = f"{nhl_players}/{player_id}/{stats_byYear}"
+        
+        # pull the data
+        year_stats = request_data(link)
+
+        # remove copyright statement
+        for key in year_stats.keys():
+            if key == 'stats':
+                year_stats = year_stats[key][0]['splits']
+    
+        # keep only seasons with actual NHL data 
+        # i.e. ignore Junior Hockey data for now
+        nhl_years = []
+        for year in year_stats:
+            if year['league']['name'] == 'National Hockey League':
+                nhl_years.append(year)
+    
+        log_file.info(nhl_years)
+
+        # parse out specific data we need for the database for each NHL year
+        for year in nhl_years:
+            season = year['season']
+            team_id = year['team']['id']
+            toi = year['stat']['timeOnIce']
+            games = year['stat']['games']
+            assists = year['stat']['assists']
+            goals = year['stat']['goals']
+            pim = year['stat']['pim']
+            shots = year['stat']['shots']
+            hits = year['stat']['hits']
+            pp_goals = year['stat']['powerPlayGoals']
+            pp_points = year['stat']['powerPlayPoints']
+            pp_toi = year['stat']['powerPlayTimeOnIce']
+            even_toi = year['stat']['evenTimeOnIce']
+            faceoff_pct = year['stat']['faceOffPct']
+            shot_pct = year['stat']['shotPct']
+            gw_goals = year['stat']['gameWinningGoals']
+            ot_goals = year['stat']['overTimeGoals']
+            sh_goals = year['stat']['shortHandedGoals']
+            sh_points = year['stat']['shortHandedPoints']
+            sh_toi = year['stat']['shortHandedTimeOnIce']
+            blocked = year['stat']['blocked']
+            plus_minus = year['stat']['plusMinus']
+            points = year['stat']['points']
+            shifts = year['stat']['shifts']
+            sequence = year['sequence']
+            # sequence essentially indicates whether it's a players first
+            # stint with a team for that season
+            # i.e. sequence = 1 for the player's first team that season;
+            #    if the player is traded/sent down to the AHL, the season
+            #    field remains the same, sequence is incremented, and player
+            #    stats start from scratch for that new league or team.
+            #    So if a player is traded mid-season, there are 2 sequences of
+            #    stats for that season to account for...
+            
+            # sql command to insert skater data into skater_season_stats table
+            season_stats_cmd = (
+                f"INSERT INTO skater_season_stats (player_id, team_id, "
+                f"season, time_on_ice, games, assists, goals, pim, shots, "
+                f"hits, pp_goals, pp_points, pp_toi, even_toi, faceoff_pct, "
+                f"shot_pct, gw_goals,ot_goals, sh_goals, sh_points, sh_toi, "
+                f"blocked_shots, plus_minus, points, shifts, sequence) "
+                f"VALUES ({player_id}, {team_id}, $${season}$$, $${toi}$$, "
+                f"{games}, {assists}, {goals}, {pim}, {shots}, {hits}, "
+                f"{pp_goals}, {pp_points}, $${pp_toi}$$, $${even_toi}$$, "
+                f"{faceoff_pct}, {shot_pct}, {gw_goals}, {ot_goals}, "
+                f"{sh_goals}, {sh_points}, $${sh_toi}$$, {blocked}, "
+                f"{plus_minus}, {points}, {shifts}, {sequence})"
+            )
+            log_file.info(season_stats_cmd)
+
+
+def _goalieStats_yearByYear():
+    '''
+    Pull goalie-specific year-by-year stats from NHL website.
+    '''
+
+    # put in same stuff from top of _skaterStats_yearByYear()
+
+    # goalie-specific stats
+    # wins = year['stat']['wins']
+    # losses = year['stat']['losses']
+    # ot_wins = year['stat']['ot']
+    # shutouts = year['stat']['shutouts']
+    # saves = year['stat']['saves']
+    # pp_saves = year['stat']['powerPlaySaves']
+    # sh_saves = year['stat']['shortHandedSaves']
+    # even_saves = year['stat']['evenSaves']
+    # pp_shots = year['stat']['powerPlayShots']
+    # sh_shots = year['stat']['shortHandedShots']
+    # even_shots = year['stat']['evenShots']
+    # save_pct = year['stat']['savePercentage']
+    # gaa = year['stat']['goalAgainstAverage']
+    # starts = year['stat']['gamesStarted']
+    # shots_against = year['stat']['shotsAgainst']
+    # goals_against = year['stat']['goalsAgainst']
+    # pp_save_pct = year['stat']['powerPlaySavePercentage']
+    # sh_save_pct = year['stat']['shortHandedSavePercentage']
+    # even_save_pct = year['stat']['evenStrengthSavePercentage']
+
+
+
 #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 if __name__ == '__main__':
@@ -320,6 +446,10 @@ if __name__ == '__main__':
     nhl_players_teamIds = config['PLAYERS']['TEAM_ID']
     nhl_players_list = config['PLAYERS']['LIST']
     
+    # setup stats API endpoints from config file
+    stats_list = config['STATS']['LIST']
+    stats_byYear = config['STATS']['yearByYear']
+    stats_playersByYear = config['STATS']['playersByYear']
 
     # get database credentials from config file
     log_file.info('Setting database credentials from config file...')
@@ -341,6 +471,10 @@ if __name__ == '__main__':
     if nhl_players_list != 'NONE':
         log_file.info('Pulling NHL Player data and storing in database...')
         _players(nhl_players, nhl_players_teamIds)
+
+    if stats_list != 'NONE':
+        log_file.info('Pulling year-by-year stats for NHL players...')
+        _skaterStats_yearByYear()
 
     # close database connection
     db_connect.close()
