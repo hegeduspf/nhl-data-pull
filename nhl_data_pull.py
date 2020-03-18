@@ -203,6 +203,11 @@ def _players(url, team_ids):
         # create list of team ids
         team_list = cursor.fetchall()
     else:
+        # team_list = []
+        # cmd = (
+        #     f"SELECT id, name FROM teams "
+        #     f"WHERE id = ({team_list})"
+        # )
         team_list = team_ids.split()
     
     # pdb.set_trace()
@@ -242,7 +247,10 @@ def _players(url, team_ids):
             position_code = dataset['primaryPosition']['abbreviation']
             position_name = dataset['primaryPosition']['name']
             position_type = dataset['primaryPosition']['type']
-            season = '20192020'
+            season = current_season
+            
+            sequence = _get_player_sequence(endpoint, team_name)
+            if sequence is None: continue
 
             # pdb.set_trace()
             players_cmd = (
@@ -256,8 +264,8 @@ def _players(url, team_ids):
             )
             team_players_cmd = (
                 f"INSERT INTO team_players (team_id, player_id, season, "
-                f"active) VALUES ({team_id}, {player_id}, $${season}$$, "
-                f"{active})"
+                f"active, sequence) VALUES ({team_id}, {player_id}, "
+                f"$${season}$$, {active}, {sequence})"
             )
 
             # load parsed player data into database
@@ -415,7 +423,63 @@ def _goalieStats_yearByYear():
     # sh_save_pct = year['stat']['shortHandedSavePercentage']
     # even_save_pct = year['stat']['evenStrengthSavePercentage']
 
+def _get_player_sequence(url, team):
+    '''
+    Given the player's NHL API endpoint (i.e. /api/v1/people/8473563) and an NHL team_id, return the sequence number for the player's current season at
+    that team.
 
+    This is needed to determine whether a player has been traded mid-season,
+    reassigned to the AHL and called up again, etc.
+    '''
+
+    # only want player id from the provided link
+    player = url.split('/')[4]
+
+    # create link to player's stats to get sequence number for curr season
+    link = f"{nhl_players}/{player}/stats?stats=yearByYear"
+
+    # request intial data using link
+    log_file.info(f"Starting to get player sequence from {link}...")
+    years = request_data(link)
+
+    # only want current year data to find what sequence is for that team
+    for key in years.keys():
+        if key == 'stats':
+            years = years[key][0]['splits']
+
+    found = []
+    pdb.set_trace()
+    for year in years:
+        if year['season'] == current_season:
+            found.append(year)
+    # now find most recent team sequence number (if applicable)
+    if len(found) > 1:
+        # more than one sequence this season
+        for i in found:
+            if i['league']['name'] == 'Nationl Hockey League' and \
+                i['team']['name'] == team:
+                seq = i['sequenceNumber']
+    elif len(found) == 1:
+        # only one
+        seq = found[0]['sequenceNumber']
+    else:
+        # less than/equal to zero - something went wrong
+        log_file.warning(
+            f"Could not find sequence data for {player}...likely no NHL stats "
+            f"for season {current_season}...not adding to database."
+        )
+        return None
+    
+    # check whether sequence was found
+    if 'seq' not in locals():
+        log_file.warning(
+            f"Could not find sequence data for {player}...likely no NHL stats "
+            f"for season {current_season}...not adding to database."
+        )
+        return None
+    else:
+        log_file.info(f"Found player {player}'s team sequence: {seq}...")
+        return seq
 
 #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
@@ -445,6 +509,7 @@ if __name__ == '__main__':
     nhl_teams_list = config['TEAMS']['LIST']
     nhl_players_teamIds = config['PLAYERS']['TEAM_ID']
     nhl_players_list = config['PLAYERS']['LIST']
+    current_season = config['DEFAULT']['SEASON']
     
     # setup stats API endpoints from config file
     stats_list = config['STATS']['LIST']

@@ -1,11 +1,12 @@
 /* File used to create tables in the nhl_data 
 PostgreSQL table. */
 
-/* Drop Tables
-DROP TABLE team_players;
-DROP TABLE players;
-DROP TABLE teams;
-*/
+/* Drop Tables */
+-- DROP TABLE team_players;
+-- DROP TABLE players;
+-- DROP TABLE teams;
+-- DROP TABLE skater_season_stats;
+
 
 /* Initial table creation */
 
@@ -34,15 +35,16 @@ CREATE TABLE "players" (
 );
 
 CREATE TABLE "team_players" (
-    "team_id" int,
     "player_id" int,
+    "team_id" int,
     "season" char(8),
     "active" boolean,
-    PRIMARY KEY ("team_id", "player_id")
+    "sequence" int,
+    PRIMARY KEY ("player_id", "team_id", "sequence")
 );
 
 CREATE TABLE "skater_season_stats" (
-    "player_id" int PRIMARY KEY,
+    "player_id" int,
     "team_id" int,
     "season" char(8),
     "time_on_ice" varchar,
@@ -67,12 +69,11 @@ CREATE TABLE "skater_season_stats" (
     "plus_minus" int,
     "points" int,
     "shifts" int,
-    "sequence" int
+    "sequence" int,
+    PRIMARY KEY ("player_id", "team_id", "sequence")
 );
 
 /* Add foreign key references */
-
 ALTER TABLE "team_players" ADD FOREIGN KEY ("team_id") REFERENCES "teams" ("id");
 ALTER TABLE "team_players" ADD FOREIGN KEY ("player_id") REFERENCES "players" ("id");
-ALTER TABLE "skater_season_stats" ADD FOREIGN KEY ("player_id") REFERENCES "team_players" ("player_id");
-ALTER TABLE "skater_season_stats" ADD FOREIGN KEY ("team_id") REFERENCES "team_players" ("team_id");
+ALTER TABLE "skater_season_stats" ADD FOREIGN KEY ("player_id", "team_id", "sequence") REFERENCES "team_players" ("player_id", "team_id", "sequence");
