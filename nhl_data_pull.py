@@ -377,7 +377,7 @@ def _skaterStats_yearByYear():
             plus_minus = year['stat']['plusMinus']
             points = year['stat']['points']
             shifts = year['stat']['shifts']
-            sequence = year['sequence']
+            sequence = year['sequenceNumber']
             # sequence essentially indicates whether it's a players first
             # stint with a team for that season
             # i.e. sequence = 1 for the player's first team that season;
@@ -392,7 +392,7 @@ def _skaterStats_yearByYear():
                 f"INSERT INTO skater_season_stats (player_id, team_id, "
                 f"season, time_on_ice, games, assists, goals, pim, shots, "
                 f"hits, pp_goals, pp_points, pp_toi, even_toi, faceoff_pct, "
-                f"shot_pct, gw_goals,ot_goals, sh_goals, sh_points, sh_toi, "
+                f"shot_pct, gw_goals, ot_goals, sh_goals, sh_points, sh_toi, "
                 f"blocked_shots, plus_minus, points, shifts, sequence) "
                 f"VALUES ({player_id}, {team_id}, $${season}$$, $${toi}$$, "
                 f"{games}, {assists}, {goals}, {pim}, {shots}, {hits}, "
@@ -401,7 +401,26 @@ def _skaterStats_yearByYear():
                 f"{sh_goals}, {sh_points}, $${sh_toi}$$, {blocked}, "
                 f"{plus_minus}, {points}, {shifts}, {sequence})"
             )
-            log_file.info(season_stats_cmd)
+
+            # load parsed player stats into database
+            skater_season_status = sql_insert(db_connect, season_stats_cmd)
+
+            # log results
+            if skater_season_status == 0:
+                if season == current_season:
+                    log_file.info(f">> Finished inserting data for player "
+                        f"{player_id} with the {season} season...")
+                else:
+                    log_file.info(f">> Successfully inserted data for player "
+                        f"{player_id} ({season} season) to the " f"skater_season_stats table...")
+            else:
+                # database error
+                log_file.warning(f">> Could not insert data for {player_id} "
+                    f"({season})...check log for database error/exception...")
+    
+    log_file.info(f">> Completed pulling yearByYear player stats using list "
+        f"from configuration file...")
+        
 
 
 def _goalieStats_yearByYear():
@@ -462,15 +481,11 @@ def _get_player_sequence(url, team):
         if year['season'] == current_season:
             found.append(year)
     # now find most recent team sequence number (if applicable)
-    if len(found) > 1:
-        # more than one sequence this season
+    if len(found) >= 1:
         for i in found:
             if i['league']['name'] == 'National Hockey League' and \
                 i['team']['name'] == team:
                 seq = i['sequenceNumber']
-    elif len(found) == 1:
-        # only one
-        seq = found[0]['sequenceNumber']
     else:
         # less than/equal to zero - something went wrong
         log_file.warning(
