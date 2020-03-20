@@ -2,10 +2,10 @@
 PostgreSQL table. */
 
 /* Drop Tables */
+-- DROP TABLE skater_season_stats;
 -- DROP TABLE team_players;
 -- DROP TABLE players;
 -- DROP TABLE teams;
--- DROP TABLE skater_season_stats;
 
 
 /* Initial table creation */
@@ -40,7 +40,7 @@ CREATE TABLE "team_players" (
     "season" char(8),
     "active" boolean,
     "sequence" int,
-    PRIMARY KEY ("player_id", "team_id", "sequence")
+    PRIMARY KEY ("player_id", "team_id", "season", "sequence")
 );
 
 CREATE TABLE "skater_season_stats" (
@@ -70,10 +70,10 @@ CREATE TABLE "skater_season_stats" (
     "points" int,
     "shifts" int,
     "sequence" int,
-    PRIMARY KEY ("player_id", "team_id", "sequence")
+    PRIMARY KEY ("player_id", "team_id", "season", "sequence")
 );
 
 /* Add foreign key references */
 ALTER TABLE "team_players" ADD FOREIGN KEY ("team_id") REFERENCES "teams" ("id");
 ALTER TABLE "team_players" ADD FOREIGN KEY ("player_id") REFERENCES "players" ("id");
-ALTER TABLE "skater_season_stats" ADD FOREIGN KEY ("player_id", "team_id", "sequence") REFERENCES "team_players" ("player_id", "team_id", "sequence");
+ALTER TABLE "skater_season_stats" ADD FOREIGN KEY ("player_id", "team_id", "season", "sequence") REFERENCES "team_players" ("player_id", "team_id", "season", "sequence");
