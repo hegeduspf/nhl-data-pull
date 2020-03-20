@@ -96,20 +96,30 @@ def request_data(url):
     This function returns the full dict, it does not separate out the actual 
     data found in the list of dicts that makes up the value from a key-value
     pair after the copyright info.
+
+    Note: Retry the connection twice if run into timeout error.
     '''
 
     log_file.info(f"Requesting data from {url}...")
-    r = requests.get(url)
-    if r.status_code == 200:
-        # successful request, return data
-        log_file.info('Successfully pulled data from provided URL...')
-        return r.json()
-    else:
-        # print exception message since request failed
-        r.raise_for_status()
-        log_file.info('Exiting after failing to pull data from url')
-        sys.exit(1)
-        return None
+    for _ in range(3):
+        try:
+            r = requests.get(url)
+            if r.status_code == 200:
+                # successful request, return data
+                log_file.info(
+                    f"Pulled data on {_ + 1} try from {url}..."
+                )
+                return r.json()
+        except requests.exceptions.Timeout:
+            # retry
+            log_file.info(
+              f"Connection to {url} timed out on try {_ + 1}...retrying"
+            )
+            continue
+        except requests.exceptions.RequestException as e:
+            log_file.error(e)
+            sys.exit(1)
+
 
 def sql_insert(conn, cmd):
     '''
@@ -195,21 +205,20 @@ def _players(url, team_ids):
     '''
 
     # get roster from each team in database
+    team_list = []
     if team_ids == 'ALL':
-        team_list = []
         cmd = 'SELECT id, name FROM teams'
-        cursor = db_connect.cursor()
-        cursor.execute(cmd)
-        # create list of team ids
-        team_list = cursor.fetchall()
     else:
-        # team_list = []
-        # cmd = (
-        #     f"SELECT id, name FROM teams "
-        #     f"WHERE id = ({team_list})"
-        # )
-        team_list = team_ids.split()
-    
+        cmd = (
+            f"SELECT id, name FROM teams "
+            f"WHERE id IN({team_ids})"
+        )
+    # pull from database
+    cursor = db_connect.cursor()
+    cursor.execute(cmd)
+    # create list of team ids with database list
+    team_list = cursor.fetchall()
+
     # pdb.set_trace()
     # get roster of players from each team
     for team_id, team_name in team_list:
@@ -448,7 +457,7 @@ def _get_player_sequence(url, team):
             years = years[key][0]['splits']
 
     found = []
-    pdb.set_trace()
+    # pdb.set_trace()
     for year in years:
         if year['season'] == current_season:
             found.append(year)
@@ -456,7 +465,7 @@ def _get_player_sequence(url, team):
     if len(found) > 1:
         # more than one sequence this season
         for i in found:
-            if i['league']['name'] == 'Nationl Hockey League' and \
+            if i['league']['name'] == 'National Hockey League' and \
                 i['team']['name'] == team:
                 seq = i['sequenceNumber']
     elif len(found) == 1:
@@ -510,7 +519,7 @@ if __name__ == '__main__':
     nhl_players_teamIds = config['PLAYERS']['TEAM_ID']
     nhl_players_list = config['PLAYERS']['LIST']
     current_season = config['DEFAULT']['SEASON']
-    
+
     # setup stats API endpoints from config file
     stats_list = config['STATS']['LIST']
     stats_byYear = config['STATS']['yearByYear']
