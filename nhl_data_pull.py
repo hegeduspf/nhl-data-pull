@@ -1,4 +1,5 @@
 '''
+
 Description: Store team/player data from the NHL website in a database.
 
 This program pulls team and player data from the NHL website's publicly
@@ -326,6 +327,8 @@ def _skaterStats_yearByYear():
         cursor.execute(cmd)
         for id in cursor.fetchall():
             player_list.append(id[0])
+        cursor.close()
+        db_connect.rollback()
     else:
         # get stats for player IDs listed in config file
         player_list = stats_playersByYear.split()
@@ -378,15 +381,10 @@ def _skaterStats_yearByYear():
             points = year['stat']['points']
             shifts = year['stat']['shifts']
             sequence = year['sequenceNumber']
-            # sequence essentially indicates whether it's a players first
-            # stint with a team for that season
-            # i.e. sequence = 1 for the player's first team that season;
-            #    if the player is traded/sent down to the AHL, the season
-            #    field remains the same, sequence is incremented, and player
-            #    stats start from scratch for that new league or team.
-            #    So if a player is traded mid-season, there are 2 sequences of
-            #    stats for that season to account for...
-            
+
+            # need to ensure this season & sequence's stats are in team_players
+            _team_players_check(player_id, team_id, season, sequence)
+
             # sql command to insert skater data into skater_season_stats table
             season_stats_cmd = (
                 f"INSERT INTO skater_season_stats (player_id, team_id, "
@@ -450,6 +448,50 @@ def _goalieStats_yearByYear():
     # pp_save_pct = year['stat']['powerPlaySavePercentage']
     # sh_save_pct = year['stat']['shortHandedSavePercentage']
     # even_save_pct = year['stat']['evenStrengthSavePercentage']
+
+def _team_players_check(player, team, season, seq):
+    '''
+    Given a player's stats for a particular season and sequence, determine if
+    there is a corresponding record in the team_players table.
+
+    If there's not a matching record, add one from the given data. This new 
+    record is necessary to be able to create a related stats record for that
+    player/season in skater_season_stats.
+    '''
+
+    # check if record in team_players exists that matches provided column data
+    if season != current_season:
+        active = False
+    else:
+        active = True
+    cmd = (
+        f"SELECT EXISTS("
+        f"SELECT 1 FROM team_players WHERE player_id = {player} AND team_id "
+        f"= {team} AND season = $${season}$$ AND sequence = {seq})"
+    )
+    cursor = db_connect.cursor()
+    cursor.execute(cmd)
+    check = cursor.fetchone()[0]
+    cursor.close()
+    db_connect.rollback()
+
+    if check == False:
+        # record doesn't exist in team_players; create it ourselves now
+        insert_cmd = (
+            f"INSERT INTO team_players (player_id, team_id, season, active, "
+            f"sequence) VALUES ({player}, {team}, $${season}$$, {active}, "
+            f"{seq})"
+        )
+        insert_status = sql_insert(db_connect, insert_cmd)
+        if insert_status == 0:
+            log_file.info(f">>> Added additional record to team_players for "
+                f"player {player} ({season})..."
+            )
+        return 0
+    else:
+        # record exists
+        return 1
+
 
 def _get_player_sequence(url, team):
     '''
