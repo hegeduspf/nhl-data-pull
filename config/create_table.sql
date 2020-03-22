@@ -83,6 +83,7 @@ CREATE TABLE "goalie_season_stats" (
     "starts" int,
     "wins" int,
     "losses" int,
+    "ties" int,
     "ot_wins" int,
     "shutouts" int,
     "saves" int,

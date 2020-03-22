@@ -121,7 +121,6 @@ def request_data(url):
             log_file.error(e)
             sys.exit(1)
 
-
 def sql_insert(conn, cmd):
     '''
     Execute an SQL insert command using an established database connection.
@@ -311,7 +310,9 @@ def parse_roster(roster):
 
 def _skaterStats_yearByYear():
     '''
-    Pull year-by-year statistics for a player's NHL seasons.
+    Pull year-by-year statistics for a skater's NHL seasons. A skater is
+    defined to by any NHL player that is not a goalie (i.e. any Forward
+    or Defenseman).
     '''
 
     if stats_playersByYear == 'ALL':
@@ -320,8 +321,8 @@ def _skaterStats_yearByYear():
         # make sure we don't include goalies
         cmd = (
             f"SELECT DISTINCT player_id FROM team_players "
-            f"EXCEPT "
-            f"SELECT id FROM players WHERE position_code = 'G'"
+            f"INNER JOIN players ON team_players.player_id = players.id "
+            f"WHERE players.position_code != 'G'"
         )
         cursor = db_connect.cursor()
         cursor.execute(cmd)
@@ -352,7 +353,9 @@ def _skaterStats_yearByYear():
             if year['league']['name'] == 'National Hockey League':
                 nhl_years.append(year)
     
-        log_file.info(nhl_years)
+        log_file.info(
+            f"{len(nhl_years)} NHL seasons found for player {player_id}"
+        )
 
         # parse out specific data we need for the database for each NHL year
         for i, year in enumerate(nhl_years):
@@ -381,8 +384,14 @@ def _skaterStats_yearByYear():
             points = year['stat']['points']
             shifts = year['stat']['shifts']
             sequence = year['sequenceNumber']
-
-            # correctly set active to handle edge case of player's 
+        
+            # log which NHL season we're looking at
+            log_file.info(
+                f"> Loading data for skater {player_id}'s {season} NHL "
+                f"season..."
+            )
+        
+            # correctly set active to handle edge case of players that are
             # traded/reassigned mid-season
             if i < len(nhl_years) - 1:
                 # past NHL season; active should be false
@@ -419,48 +428,166 @@ def _skaterStats_yearByYear():
             # log results
             if skater_season_status == 0:
                 if season == current_season:
-                    log_file.info(f">> Finished inserting data for player "
+                    log_file.info(f">> Finished loading all data for skater "
                         f"{player_id} with the {season} season...")
                 else:
-                    log_file.info(f">> Successfully inserted data for player "
+                    log_file.info(f">> Successfully inserted data for skater "
                         f"{player_id} ({season} season) to the " f"skater_season_stats table...")
             else:
                 # database error
                 log_file.warning(f">> Could not insert data for {player_id} "
                     f"({season})...check log for database error/exception...")
     
-    log_file.info(f">> Completed pulling yearByYear player stats using list "
+    log_file.info(f">> Completed pulling yearByYear skater stats using list "
         f"from configuration file...")
         
-
-
 def _goalieStats_yearByYear():
     '''
-    Pull goalie-specific year-by-year stats from NHL website.
+    Pull year-by-year statistics for a Goalie's NHL seasons.
     '''
 
-    # put in same stuff from top of _skaterStats_yearByYear()
+    if stats_goaliesByYear == 'ALL':
+        # get stats for all goalies in team_players table
+        player_list = []
+        # only include goalies
+        cmd = (
+            f"SELECT DISTINCT player_id FROM team_players "
+            f"INNER JOIN players ON team_players.player_id = players.id "
+            f"WHERE players.position_code = 'G'"
+        )
+        cursor = db_connect.cursor()
+        cursor.execute(cmd)
+        for id in cursor.fetchall():
+            player_list.append(id[0])
+        cursor.close()
+        db_connect.rollback()
+    else:
+        # get stats for player IDs listed in config file
+        player_list = stats_playersByYear.split()
 
-    # goalie-specific stats
-    # wins = year['stat']['wins']
-    # losses = year['stat']['losses']
-    # ot_wins = year['stat']['ot']
-    # shutouts = year['stat']['shutouts']
-    # saves = year['stat']['saves']
-    # pp_saves = year['stat']['powerPlaySaves']
-    # sh_saves = year['stat']['shortHandedSaves']
-    # even_saves = year['stat']['evenSaves']
-    # pp_shots = year['stat']['powerPlayShots']
-    # sh_shots = year['stat']['shortHandedShots']
-    # even_shots = year['stat']['evenShots']
-    # save_pct = year['stat']['savePercentage']
-    # gaa = year['stat']['goalAgainstAverage']
-    # starts = year['stat']['gamesStarted']
-    # shots_against = year['stat']['shotsAgainst']
-    # goals_against = year['stat']['goalsAgainst']
-    # pp_save_pct = year['stat']['powerPlaySavePercentage']
-    # sh_save_pct = year['stat']['shortHandedSavePercentage']
-    # even_save_pct = year['stat']['evenStrengthSavePercentage']
+    for player_id in player_list:
+        # create link to player's yearByYear stats page
+        link = f"{nhl_players}/{player_id}/{stats_byYear}"
+
+        # pull the player's yearByYear data
+        year_stats = request_data(link)
+
+        # remove copyright statement
+        for key in year_stats.keys():
+            if key == 'stats':
+                year_stats = year_stats[key][0]['splits']
+
+        # keep only seasons with actual NHL data
+        nhl_years = []
+        for year in year_stats:
+            if year['league']['name'] == 'National Hockey League':
+                nhl_years.append(year)
+
+        log_file.info(
+            f"{len(nhl_years)} NHL seasons found for player {player_id}"
+        )
+
+        # parse out specific data we need for the database for each NHL year
+        for i, year in enumerate(nhl_years):
+            season = year['season']
+            team_id = year['team']['id']
+            toi = year['stat']['timeOnIce']
+            games = year['stat']['games']
+            starts = year['stat']['gamesStarted']
+            wins = year['stat']['wins']
+            losses = year['stat']['losses']
+            shutouts = year['stat']['shutouts']
+            saves = year['stat']['saves']
+            pp_saves = year['stat']['powerPlaySaves']
+            sh_saves = year['stat']['shortHandedSaves']
+            even_saves = year['stat']['evenSaves']
+            pp_shots = year['stat']['powerPlayShots']
+            sh_shots = year['stat']['shortHandedShots']
+            even_shots = year['stat']['evenShots']
+            save_pct = year['stat']['savePercentage']
+            gaa = year['stat']['goalAgainstAverage']
+            shots_against = year['stat']['shotsAgainst']
+            goals_against = year['stat']['goalsAgainst']
+            sequence = year['sequenceNumber']
+            
+            # pre 2005-2006 OT games could end in ties & OT wins weren't tracked
+            if season < '20052006':
+                ties = year['stat']['ties']
+                ot_wins = 'NULL'
+            else:
+                ties = 'NULL'
+                ot_wins = year['stat']['ot']
+
+            # individual save_pcts aren't saved if corresponding shot count is 0
+            if pp_shots != 0:
+                pp_save_pct = year['stat']['powerPlaySavePercentage']
+            else:
+                pp_save_pct = 0
+            if sh_shots != 0:
+                sh_save_pct = year['stat']['shortHandedSavePercentage']
+            else:
+                sh_save_pct = 0
+            if even_shots != 0:
+                even_save_pct = year['stat']['evenStrengthSavePercentage']
+            else:
+                even_save_pct = 0
+        
+            # log which NHL season we're looking at
+            log_file.info(
+                f"> Loading data for goalie {player_id}'s {season} NHL "
+                f"season..."
+            )
+
+            # correctly set active to handle edge case of players that are 
+            # traded/reassigned mid-season
+            if i < len(nhl_years) - 1:
+                # past NHL season; active should be false
+                active = False
+            else:
+                # current or last played NHL season
+                if season == current_season:
+                    active = True
+                else:
+                    # no NHL data for current season - in AHL/other league
+                    active = False
+
+            # ensure this season & sequence are in team_players table
+            _team_players_check(player_id, team_id, season, active, sequence)
+
+            # sql command to insert goalie data into goalie_season_stats table
+            season_stats_cmd = (
+                f"INSERT INTO goalie_season_stats (player_id, team_id, season, "
+                f"time_on_ice, games, starts, wins, losses, ties, ot_wins, "
+                f"shutouts, saves, pp_saves, sh_saves, even_saves, pp_shots, "
+                f"sh_shots, even_shots, save_pct, gaa, shots_against, "
+                f"goals_against, pp_save_pct, sh_save_pct, even_save_pct, "
+                f"sequence) VALUES ({player_id}, {team_id}, $${season}$$, "
+                f"$${toi}$$, {games}, {starts}, {wins}, {losses}, {ties}, "
+                f"{ot_wins}, {shutouts}, {saves}, {pp_saves}, {sh_saves}, "
+                f"{even_saves}, {pp_shots}, {sh_shots}, {even_shots}, "
+                f"{save_pct}, {gaa}, {shots_against}, {goals_against}, "
+                f"{pp_save_pct}, {sh_save_pct}, {even_save_pct}, {sequence})"
+            )
+
+            # load parsed player stats into database
+            goalie_season_status = sql_insert(db_connect, season_stats_cmd)
+
+            # log results
+            if goalie_season_status == 0:
+                if season == current_season:
+                    log_file.info(f">> Finished loading all data for goalie "
+                        f"{player_id} with the {season} season...")
+                else:
+                    log_file.info(f">> Successfully inserted data for goalie "
+                        f"{player_id} ({season} season) to the "
+                        f"goalie_season_stats table...")
+            else:
+                # database error
+                log_file.warning(f">> Could not insert data for {player_id} "
+                    f"({season})...check log for database error/exception...")
+    
+    log_file.info(f">> Completed pulling yearByYear goalie stats using list "
+        f"from configuration file...")
 
 def _team_players_check(player, team, season, active, seq):
     '''
@@ -500,7 +627,6 @@ def _team_players_check(player, team, season, active, seq):
     else:
         # record exists
         return 1
-
 
 def _get_player_sequence(url, team):
     '''
@@ -590,6 +716,7 @@ if __name__ == '__main__':
     stats_list = config['STATS']['LIST']
     stats_byYear = config['STATS']['yearByYear']
     stats_playersByYear = config['STATS']['playersByYear']
+    stats_goaliesByYear = config['STATS']['goaliesByYear']
 
     # get database credentials from config file
     log_file.info('Setting database credentials from config file...')
@@ -612,9 +739,22 @@ if __name__ == '__main__':
         log_file.info('Pulling NHL Player data and storing in database...')
         _players(nhl_players, nhl_players_teamIds)
 
-    if stats_list != 'NONE':
-        log_file.info('Pulling year-by-year stats for NHL players...')
+    if stats_list == 'ALL':
+        log_file.info('Pulling year-by-year stats for NHL skaters...')
         _skaterStats_yearByYear()
+        log_file.info('Pulling year-by-year stats for NHL goalies...')
+        _goalieStats_yearByYear()
+    elif stats_list == 'SKATERS':
+        # just get skaters season-by-season stats
+        log_file.info('Pulling year-by-year stats for NHL skaters...')
+        _skaterStats_yearByYear()
+    elif stats_list == 'GOALIES':
+        # just get goalies season-by-season stats
+        log_file.info('Pulling year-by-year stats for NHL goalies...')
+        _goalieStats_yearByYear()
+    else:
+        # as of now, do nothing
+        log_file.info('Not getting any player stats...')
 
     # close database connection
     db_connect.close()
