@@ -3,6 +3,7 @@ PostgreSQL table. */
 
 /* Drop Tables */
 -- DROP TABLE skater_season_stats;
+-- DROP TABLE goalie_season_stats;
 -- DROP TABLE team_players;
 -- DROP TABLE players;
 -- DROP TABLE teams;
