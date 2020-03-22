@@ -355,7 +355,7 @@ def _skaterStats_yearByYear():
         log_file.info(nhl_years)
 
         # parse out specific data we need for the database for each NHL year
-        for year in nhl_years:
+        for i, year in enumerate(nhl_years):
             season = year['season']
             team_id = year['team']['id']
             toi = year['stat']['timeOnIce']
@@ -382,8 +382,21 @@ def _skaterStats_yearByYear():
             shifts = year['stat']['shifts']
             sequence = year['sequenceNumber']
 
-            # need to ensure this season & sequence's stats are in team_players
-            _team_players_check(player_id, team_id, season, sequence)
+            # correctly set active to handle edge case of player's 
+            # traded/reassigned mid-season
+            if i < len(nhl_years) - 1:
+                # past NHL season; active should be false
+                active = False
+            else:
+                # current or last played NHL season for player
+                if season == current_season:
+                    active = True
+                else:
+                    # no NHL data for current season - in AHL/other league
+                    active = False
+
+            # ensure this season & sequence's stats are in team_players
+            _team_players_check(player_id, team_id, season, active, sequence)
 
             # sql command to insert skater data into skater_season_stats table
             season_stats_cmd = (
@@ -449,7 +462,7 @@ def _goalieStats_yearByYear():
     # sh_save_pct = year['stat']['shortHandedSavePercentage']
     # even_save_pct = year['stat']['evenStrengthSavePercentage']
 
-def _team_players_check(player, team, season, seq):
+def _team_players_check(player, team, season, active, seq):
     '''
     Given a player's stats for a particular season and sequence, determine if
     there is a corresponding record in the team_players table.
@@ -460,10 +473,6 @@ def _team_players_check(player, team, season, seq):
     '''
 
     # check if record in team_players exists that matches provided column data
-    if season != current_season:
-        active = False
-    else:
-        active = True
     cmd = (
         f"SELECT EXISTS("
         f"SELECT 1 FROM team_players WHERE player_id = {player} AND team_id "
