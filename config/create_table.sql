@@ -58,8 +58,8 @@ CREATE TABLE "skater_season_stats" (
     "pp_points" int,
     "pp_toi" varchar,
     "even_toi" varchar,
-    "faceoff_pct" float8,
-    "shot_pct" float8,
+    "faceoff_pct" float,
+    "shot_pct" float,
     "gw_goals" int,
     "ot_goals" int,
     "sh_goals" int,
@@ -73,7 +73,36 @@ CREATE TABLE "skater_season_stats" (
     PRIMARY KEY ("player_id", "team_id", "season", "sequence")
 );
 
+CREATE TABLE "goalie_season_stats" (
+    "player_id" int,
+    "team_id" int,
+    "season" char(8),
+    "time_on_ice" varchar,
+    "games" int,
+    "starts" int,
+    "wins" int,
+    "losses" int,
+    "ot_wins" int,
+    "shutouts" int,
+    "saves" int,
+    "pp_saves" int,
+    "sh_saves" int,
+    "even_saves" int,
+    "pp_shots" int,
+    "sh_shots" int,
+    "even_shots" int,
+    "save_pct" float,
+    "gaa" float,
+    "shots_against" int,
+    "goals_against" int,
+    "pp_save_pct" float,
+    "sh_save_pct" float,
+    "even_save_pct" float,
+    "sequence" int
+);
+
 /* Add foreign key references */
 ALTER TABLE "team_players" ADD FOREIGN KEY ("team_id") REFERENCES "teams" ("id");
 ALTER TABLE "team_players" ADD FOREIGN KEY ("player_id") REFERENCES "players" ("id");
 ALTER TABLE "skater_season_stats" ADD FOREIGN KEY ("player_id", "team_id", "season", "sequence") REFERENCES "team_players" ("player_id", "team_id", "season", "sequence");
+ALTER TABLE "goalie_season_stats" ADD FOREIGN KEY ("player_id", "team_id", "season", "sequence") REFERENCES "team_players" ("player_id", "team_id", "season", "sequence");
