@@ -354,7 +354,7 @@ def _players(url, team_ids):
                     f"$${shoots_catches}$$, position_code = "
                     f"$${position_code}$$, position_name = "
                     f"$${position_name}$$, position_type = "
-                    f"$${position_type}$$  WHERE id = {player_id}"
+                    f"$${position_type}$$ WHERE id = {player_id}"
                 )
                 # update player data in the database
                 players_status = sql_update(db_connect, players_update_cmd)
@@ -521,12 +521,6 @@ def _skaterStats_yearByYear():
             shifts = year['stat']['shifts']
             sequence = year['sequenceNumber']
         
-            # log which NHL season we're looking at
-            log_file.info(
-                f"> Loading data for skater {player_id}'s {season} NHL "
-                f"season..."
-            )
-        
             # correctly set active to handle edge case of players that are
             # traded/reassigned mid-season
             if i < len(nhl_years) - 1:
@@ -543,26 +537,64 @@ def _skaterStats_yearByYear():
             # ensure this season & sequence's data are in team_players
             _team_players_check(player_id, team_id, season, active, sequence)
 
-            # sql command to insert skater data into skater_season_stats table
-            season_stats_cmd = (
-                f"INSERT INTO skater_season_stats (player_id, team_id, "
-                f"season, time_on_ice, games, assists, goals, pim, shots, "
-                f"hits, pp_goals, pp_points, pp_toi, even_toi, faceoff_pct, "
-                f"shot_pct, gw_goals, ot_goals, sh_goals, sh_points, sh_toi, "
-                f"blocked_shots, plus_minus, points, shifts, sequence) "
-                f"VALUES ({player_id}, {team_id}, $${season}$$, $${toi}$$, "
-                f"{games}, {assists}, {goals}, {pim}, {shots}, {hits}, "
-                f"{pp_goals}, {pp_points}, $${pp_toi}$$, $${even_toi}$$, "
-                f"{faceoff_pct}, {shot_pct}, {gw_goals}, {ot_goals}, "
-                f"{sh_goals}, {sh_points}, $${sh_toi}$$, {blocked}, "
-                f"{plus_minus}, {points}, {shifts}, {sequence})"
+            # determine if a record already exists for this skater/season
+            select_cmd = (
+                f"SELECT * FROM skater_season_stats WHERE player_id = "
+                f"{player_id} AND team_id = {team_id} AND season = "
+                f"$${season}$$ AND sequence = {sequence}"
             )
+            skater_season_check = sql_select(db_connect, select_cmd, False)
 
-            # load parsed player stats into database
-            skater_season_status = sql_insert(db_connect, season_stats_cmd)
+            # insert/update skater_season_stats record accordingly
+            if skater_season_check:
+                # record exists for that skater and season, just update data
+                log_file.info(
+                    f"> Existing record found, updating Skater data for "
+                    f"{player_id}'s {season} NHL season..."
+                )
+                update_cmd = (
+                    f"UPDATE skater_season_stats SET player_id = {player_id}, "
+                    f"team_id = {team_id}, season = $${season}$$, "
+                    f"time_on_ice = $${toi}$$, games = {games}, assists = "
+                    f"{assists}, goals = {goals}, pim = {pim}, shots = "
+                    f"{shots}, hits = {hits}, pp_goals = {pp_goals}, "
+                    f"pp_points = {pp_points}, pp_toi = $${pp_toi}$$, "
+                    f"even_toi = $${even_toi}$$, faceoff_pct = {faceoff_pct}, "
+                    f"shot_pct = {shot_pct}, gw_goals = {gw_goals}, "
+                    f"ot_goals = {ot_goals}, sh_goals = {sh_goals}, "
+                    f"sh_points = {sh_points}, sh_toi = $${sh_toi}$$, "
+                    f"blocked_shots = {blocked}, plus_minus = {plus_minus}, "
+                    f"points = {points}, shifts = {shifts}, sequence = "
+                    f"{sequence} WHERE player_id = {player_id} AND team_id = "
+                    f"{team_id} AND season = $${season}$$ AND sequence = "
+                    f"{sequence}"
+                )
+                # update skater data in the database
+                status = sql_update(db_connect, update_cmd)
+            else:
+                # did not find a record for skater and season, insert new one
+                log_file.info(f"> No record found, updating Skater data for "
+                    f"{player_id}'s {season} NHL season..."
+                )
+                insert_cmd = (
+                    f"INSERT INTO skater_season_stats (player_id, team_id, "
+                    f"season, time_on_ice, games, assists, goals, pim, "
+                    f"shots, hits, pp_goals, pp_points, pp_toi, even_toi, "
+                    f"faceoff_pct, shot_pct, gw_goals, ot_goals, sh_goals, "
+                    f"sh_points, sh_toi, blocked_shots, plus_minus, points, "
+                    f"shifts, sequence) VALUES ({player_id}, {team_id}, "
+                    f"$${season}$$, $${toi}$$, {games}, {assists}, {goals}, "
+                    f"{pim}, {shots}, {hits}, {pp_goals}, {pp_points}, "
+                    f"$${pp_toi}$$, $${even_toi}$$, {faceoff_pct}, "
+                    f"{shot_pct}, {gw_goals}, {ot_goals}, {sh_goals}, "
+                    f"{sh_points}, $${sh_toi}$$, {blocked}, {plus_minus}, "
+                    f"{points}, {shifts}, {sequence})"
+                )
+                # insert skater season stats into the database
+                status = sql_insert(db_connect, insert_cmd)
 
-            # log results
-            if skater_season_status == 0:
+            # log successful upload; already logging database errors
+            if status == 0:
                 if season == current_season:
                     log_file.info(f">> Finished loading all data for skater "
                         f"{player_id} with the {season} season...")
