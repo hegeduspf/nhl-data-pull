@@ -601,10 +601,6 @@ def _skaterStats_yearByYear():
                 else:
                     log_file.info(f">> Successfully inserted data for skater "
                         f"{player_id} ({season} season) to the " f"skater_season_stats table...")
-            else:
-                # database error
-                log_file.warning(f">> Could not insert data for {player_id} "
-                    f"({season})...check log for database error/exception...")
     
     log_file.info(f">> Completed pulling yearByYear skater stats using list "
         f"from configuration file...")
@@ -697,12 +693,6 @@ def _goalieStats_yearByYear():
             else:
                 even_save_pct = 0
         
-            # log which NHL season we're looking at
-            log_file.info(
-                f"> Loading data for goalie {player_id}'s {season} NHL "
-                f"season..."
-            )
-
             # correctly set active to handle edge case of players that are 
             # traded/reassigned mid-season
             if i < len(nhl_years) - 1:
@@ -719,26 +709,65 @@ def _goalieStats_yearByYear():
             # ensure this season & sequence are in team_players table
             _team_players_check(player_id, team_id, season, active, sequence)
 
-            # sql command to insert goalie data into goalie_season_stats table
-            season_stats_cmd = (
-                f"INSERT INTO goalie_season_stats (player_id, team_id, season, "
-                f"time_on_ice, games, starts, wins, losses, ties, ot_wins, "
-                f"shutouts, saves, pp_saves, sh_saves, even_saves, pp_shots, "
-                f"sh_shots, even_shots, save_pct, gaa, shots_against, "
-                f"goals_against, pp_save_pct, sh_save_pct, even_save_pct, "
-                f"sequence) VALUES ({player_id}, {team_id}, $${season}$$, "
-                f"$${toi}$$, {games}, {starts}, {wins}, {losses}, {ties}, "
-                f"{ot_wins}, {shutouts}, {saves}, {pp_saves}, {sh_saves}, "
-                f"{even_saves}, {pp_shots}, {sh_shots}, {even_shots}, "
-                f"{save_pct}, {gaa}, {shots_against}, {goals_against}, "
-                f"{pp_save_pct}, {sh_save_pct}, {even_save_pct}, {sequence})"
+            # determine if a record already exists for this goalie/season
+            select_cmd = (
+                f"SELECT * FROM goalie_season_stats WHERE player_id = "
+                f"{player_id} AND team_id = {team_id} AND season = "
+                f"$${season}$$ AND sequence = {sequence}"
             )
+            goalie_season_check = sql_select(db_connect, select_cmd, False)
 
-            # load parsed player stats into database
-            goalie_season_status = sql_insert(db_connect, season_stats_cmd)
+            # insert/update goalie_season_stats record accordingly
+            if goalie_season_check:
+                # record exists for that goalie and season, just update data
+                log_file.info(
+                    f"> Existing record found, updating Goalie data for "
+                    f"{player_id}'s {season} NHL season..."
+                )
+                update_cmd = (
+                    f"UPDATE goalie_season_stats SET player_id = {player_id}, "
+                    f"team_id = {team_id}, season = $${season}$$, "
+                    f"time_on_ice = $${toi}$$, games = {games}, starts = "
+                    f"{starts}, wins = {wins}, losses = {losses}, ties = "
+                    f"{ties}, ot_wins = {ot_wins}, shutouts = {shutouts}, "
+                    f"saves = {saves}, pp_saves = {pp_saves}, sh_saves = "
+                    f"{sh_saves}, even_saves = {even_saves}, pp_shots = "
+                    f"{pp_shots}, sh_shots = {sh_shots}, even_shots = "
+                    f"{even_shots}, save_pct = {save_pct}, gaa = {gaa}, "
+                    f"shots_against = {shots_against}, goals_against = "
+                    f"{goals_against}, pp_save_pct = {pp_save_pct}, "
+                    f"sh_save_pct = {sh_save_pct}, even_save_pct = "
+                    f"{even_save_pct}, sequence = {sequence} WHERE "
+                    f"player_id = {player_id} AND team_id = {team_id} AND "
+                    f"season = $${season}$$ AND sequence = {sequence}"
+                )
+                # update skater data in the database
+                status = sql_update(db_connect, update_cmd)
+            else:
+                # did not find a record for skater and season, insert new one
+                log_file.info(f"> No record found, updating Goalie data for "
+                    f"{player_id}'s {season} NHL season..."
+                )
+                insert_cmd = (
+                    f"INSERT INTO goalie_season_stats (player_id, team_id, "
+                    f"season, time_on_ice, games, starts, wins, losses, ties, "
+                    f"ot_wins, shutouts, saves, pp_saves, sh_saves, "
+                    f"even_saves, pp_shots, sh_shots, even_shots, save_pct, "
+                    f"gaa, shots_against, goals_against, pp_save_pct, "
+                    f"sh_save_pct, even_save_pct, sequence) VALUES ("
+                    f"{player_id}, {team_id}, $${season}$$, $${toi}$$, "
+                    f"{games}, {starts}, {wins}, {losses}, {ties}, "
+                    f"{ot_wins}, {shutouts}, {saves}, {pp_saves}, {sh_saves}, "
+                    f"{even_saves}, {pp_shots}, {sh_shots}, {even_shots}, "
+                    f"{save_pct}, {gaa}, {shots_against}, {goals_against}, "
+                    f"{pp_save_pct}, {sh_save_pct}, {even_save_pct}, "
+                    f"{sequence})"
+                )
+                # insert goalie season stats into the database
+                status = sql_insert(db_connect, insert_cmd)
 
-            # log results
-            if goalie_season_status == 0:
+            # log successful upload; already logging database errors
+            if status == 0:
                 if season == current_season:
                     log_file.info(f">> Finished loading all data for goalie "
                         f"{player_id} with the {season} season...")
@@ -746,10 +775,6 @@ def _goalieStats_yearByYear():
                     log_file.info(f">> Successfully inserted data for goalie "
                         f"{player_id} ({season} season) to the "
                         f"goalie_season_stats table...")
-            else:
-                # database error
-                log_file.warning(f">> Could not insert data for {player_id} "
-                    f"({season})...check log for database error/exception...")
     
     log_file.info(f">> Completed pulling yearByYear goalie stats using list "
         f"from configuration file...")
