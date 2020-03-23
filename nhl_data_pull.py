@@ -546,7 +546,7 @@ def _skaterStats_yearByYear():
                     # no NHL data for current season - in AHL/other league
                     active = False
 
-            # ensure this season & sequence's stats are in team_players
+            # ensure this season & sequence's data are in team_players
             _team_players_check(player_id, team_id, season, active, sequence)
 
             # sql command to insert skater data into skater_season_stats table
@@ -747,13 +747,9 @@ def _team_players_check(player, team, season, active, seq):
         f"SELECT 1 FROM team_players WHERE player_id = {player} AND team_id "
         f"= {team} AND season = $${season}$$ AND sequence = {seq})"
     )
-    cursor = db_connect.cursor()
-    cursor.execute(cmd)
-    check = cursor.fetchone()[0]
-    cursor.close()
-    db_connect.rollback()
+    check = sql_select(db_connect, cmd, False)
 
-    if check == False:
+    if not check:
         # record doesn't exist in team_players; create it ourselves now
         insert_cmd = (
             f"INSERT INTO team_players (player_id, team_id, season, active, "
