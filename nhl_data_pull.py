@@ -331,30 +331,100 @@ def _players(url, team_ids):
             season = current_season
             
             sequence = _get_player_sequence(endpoint, team_name)
-            if sequence is None: continue
+            if sequence is None:
+                # no NHL data found for this season
+                continue
 
             # pdb.set_trace()
-            players_cmd = (
-                f"INSERT INTO players (id, full_name, link, current_age, "
-                f"nationality, active, rookie, shoots_catches, "
-                f"position_code, position_name, position_type) VALUES "
-                f"({player_id}, $${name}$$, $${link}$$, {age}, "
-                f"$${nationality}$$, {active}, {rookie}, $${shoots_catches}$$,"
-                f" $${position_code}$$, $${position_name}$$, "
-                f"$${position_type}$$)"
+
+            # determine if a record exists for that player
+            select_players_cmd = (
+                f"SELECT * FROM players WHERE id = {player_id}"
             )
-            team_players_cmd = (
-                f"INSERT INTO team_players (team_id, player_id, season, "
-                f"active, sequence) VALUES ({team_id}, {player_id}, "
-                f"$${season}$$, {active}, {sequence})"
+            players_check = sql_select(
+                db_connect, select_players_cmd, False)
+
+            # insert/update players table accordingly
+            if players_check:
+                # record exists for that player, just update the data
+                log_file.info(f"> Existing record found, updating NHL Player "
+                    f"data for {name} ({player_id})...")
+                players_update_cmd = (
+                    f"UPDATE players SET id = {player_id}, full_name = "
+                    f"$${name}$$, link = $${link}$$, current_age = {age}, "
+                    f"nationality = $${nationality}$$, active = {active}, "
+                    f"rookie = {rookie}, shoots_catches = "
+                    f"$${shoots_catches}$$, position_code = "
+                    f"$${position_code}$$, position_name = "
+                    f"$${position_name}$$, position_type = "
+                    f"$${position_type}$$  WHERE id = {player_id}"
+                )
+                # update player data in the database
+                players_status = sql_update(db_connect, players_update_cmd)
+            else:
+                # did not find a record for that player, insert new one
+                log_file.info(f"> No record found, inserting NHL Player data "
+                    f"for {name} ({player_id})...")
+                players_insert_cmd = (
+                    f"INSERT INTO players (id, full_name, link, current_age, "
+                    f"nationality, active, rookie, shoots_catches, "
+                    f"position_code, position_name, position_type) VALUES "
+                    f"({player_id}, $${name}$$, $${link}$$, {age}, "
+                    f"$${nationality}$$, {active}, {rookie}, "
+                    f"$${shoots_catches}$$, $${position_code}$$, "
+                    f"$${position_name}$$, $${position_type}$$)"
+                )
+                # insert the new player data into the database
+                players_status = sql_insert(db_connect, players_insert_cmd)
+
+            # determine if a corresponding record exists in the team_player
+            # bridge table
+            select_team_players_cmd = (
+                f"SELECT * FROM team_players WHERE player_id = {player_id} AND "
+                f"team_id = {team_id} AND season = $${season}$$ AND "
+                f"sequence = {sequence}"
+            )
+            team_players_check = sql_select(
+                db_connect, select_team_players_cmd, False
             )
 
-            # load parsed player data into database
-            player_status = sql_insert(db_connect, players_cmd)
-            team_players_status = sql_insert(db_connect, team_players_cmd)
+            # insert/update team_players record accordingly
+            if team_players_check:
+                # record exists, just update the data
+                log_file.info(
+                    f"> Existing record found, updating team_players data for "
+                    f"{name} ({player_id})'s {season} season with the "
+                    f"{team_name} ({team_id})..."
+                )
+                team_players_update_cmd = (
+                    f"UPDATE team_players SET player_id = {player_id}, "
+                    f"team_id = {team_id}, season = $${season}$$, active = "
+                    f"{active}, sequence = {sequence} WHERE player_id = "
+                    f"{player_id} AND team_id = {team_id} AND season = "
+                    f"$${season}$$ AND sequence = {sequence}"
+                )
+                team_players_status = sql_update(
+                    db_connect, team_players_update_cmd
+                )
+            else:
+                # did not find a corresponding record in team_players table
+                log_file.info(
+                    f"> No record found, inserting data into team_players for"
+                    f"{name} ({player_id})'s {season} season with the "
+                    f"{team_name} ({team_id})..."
+                )
+                team_players_insert_cmd = (
+                    f"INSERT INTO team_players (player_id, team_id, season, "
+                    f"active, sequence) VALUES ({player_id}, {team_id}, "
+                    f"$${season}$$, {active}, {sequence})"
+                )
+                # insert the new team_players data into the database
+                team_players_status = sql_insert(
+                    db_connect, team_players_insert_cmd
+                )
 
-            # log results
-            if player_status == 0:
+            # log successful upload; already logging database errors
+            if players_status == 0:
                 log_file.info(f">> Successfully uploaded data for {name} "
                     f"({player_id}) to players table...")
             if team_players_status == 0:
