@@ -285,11 +285,8 @@ def _players(url, team_ids):
             f"SELECT id, name FROM teams "
             f"WHERE id IN({team_ids})"
         )
-    # pull from database
-    cursor = db_connect.cursor()
-    cursor.execute(cmd)
     # create list of team ids with database list
-    team_list = cursor.fetchall()
+    team_list = sql_select(db_connect, cmd, True)
 
     # pdb.set_trace()
     # get roster of players from each team
