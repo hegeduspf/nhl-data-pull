@@ -142,6 +142,53 @@ def sql_insert(conn, cmd):
     cursor.close()
     return 0
 
+def sql_update(conn, cmd):
+    '''
+    Execute an SQL update command using an established database connection.
+
+    conn -> preexisting database connection [(i.e. a connection setup using 
+        nhl_data_pull.database_connect()]
+    cmd  -> SQL update command to execute
+    '''
+
+    cursor = conn.cursor()
+    try:
+        cursor.execute(cmd)
+        conn.commit()
+    except (Exception, psycopg2.DatabaseError) as e:
+        log_file.error(f"ERROR: {e}")
+        conn.rollback()
+        cursor.close()
+        return 1
+    cursor.close()
+    return 0
+
+def sql_select(conn, cmd, fetchall):
+    '''
+    Execute an SQL select command using an established database connection, and
+    return one/all selected records depending on fetchall parameter.
+
+    conn  -> preexisting database connection
+    cmd   -> SQL select command to execute
+    fetch -> Boolean that tells function whether to return all results or only
+              one result
+    '''
+
+    cursor = conn.cursor()
+    try:
+        cursor.execute(cmd)
+        if fetchall:
+            result = cursor.fetchall()
+        else:
+            result = cursor.fetchone()
+    except (Exception, psycopg2.DatabaseError) as e:
+        log_file.error(f"ERROR: {e}")
+        conn.rollback()
+        cursor.close()
+        return 1
+    cursor.close()
+    return result
+
 def _teams(url):
     '''
     Overall function to get complete dataset on all NHL teams, then parse down
@@ -176,16 +223,41 @@ def _teams(url):
         franchise_id = team_data['franchise']['franchiseId']
         active = team_data['active']
 
-        log_file.info(f"> Loading NHL Team data for {team_name} ({team_id})...")
-
-        insert_cmd = (
-            f"INSERT INTO teams (id, name, abbreviation, conf_id, division_id," 
-            f" franchise_id, active) VALUES ({team_id}, $${team_name}$$, "
-            f"$${abbreviation}$$, {conference_id}, {division_id}, "
-            f"{franchise_id}, {active})"
+        # determine if a record exists for that team or not
+        select_cmd = (
+            f"SELECT * FROM teams WHERE id = {team_id}"
         )
-        # load parsed team data into database using established connection
-        status = sql_insert(db_connect, insert_cmd)
+        record_check = sql_select(db_connect, select_cmd, False)
+        
+        # insert/update table record accordingly
+        if record_check:
+            # record exists for that team, just update the data
+            log_file.info(f"> Existing record found, updating NHL Team data "
+                f"for {team_name} ({team_id})...")
+
+            update_cmd = (
+                f"UPDATE teams SET id = {team_id}, name = $${team_name}$$, "
+                f"abbreviation = $${abbreviation}$$, conf_id = "
+                f"{conference_id}, division_id = {division_id} "
+                f"WHERE id = {team_id}"
+            )
+            # update team data in the database
+            status = sql_update(db_connect, update_cmd)
+        else:
+            # did not find a record for that team, insert new one
+            log_file.info(f"> No record found, inserting NHL Team data for "
+                f"{team_name} ({team_id})...")
+
+            insert_cmd = (
+                f"INSERT INTO teams (id, name, abbreviation, conf_id, division_id," 
+                f" franchise_id, active) VALUES ({team_id}, $${team_name}$$, "
+                f"$${abbreviation}$$, {conference_id}, {division_id}, "
+                f"{franchise_id}, {active})"
+            )
+            # insert the new team data into database
+            status = sql_insert(db_connect, insert_cmd)
+        
+        # log successful upload; sql_insert/update already log database errors
         if status == 0: 
             log_file.info(f">> Successfully uploaded data for {team_name} "
                 f"({team_id})...")
