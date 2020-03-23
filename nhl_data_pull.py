@@ -75,7 +75,8 @@ def database_connect():
                     user = db_user,
                     password = db_passwd,
                     host = db_host,
-                    database = db_name
+                    database = db_name,
+                    port = db_port
         )
         log_file.info('Database connection successfully established.')
     except psycopg2.DatabaseError as e:
@@ -910,6 +911,7 @@ if __name__ == '__main__':
     db_passwd = config['DATABASE']['PASSWORD']
     db_host = config['DATABASE']['CONNECTION']
     db_name = config['DATABASE']['DB_NAME']
+    db_port = config['DATABASE']['PORT']
 
     # open database connection using config file settings
     db_connect = database_connect()
