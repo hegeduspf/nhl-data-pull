@@ -466,12 +466,9 @@ def _skaterStats_yearByYear():
             f"INNER JOIN players ON team_players.player_id = players.id "
             f"WHERE players.position_code != 'G'"
         )
-        cursor = db_connect.cursor()
-        cursor.execute(cmd)
-        for id in cursor.fetchall():
+        select_results = sql_select(db_connect, cmd, True)
+        for id in select_results:
             player_list.append(id[0])
-        cursor.close()
-        db_connect.rollback()
     else:
         # get stats for player IDs listed in config file
         player_list = stats_playersByYear.split()
@@ -597,12 +594,9 @@ def _goalieStats_yearByYear():
             f"INNER JOIN players ON team_players.player_id = players.id "
             f"WHERE players.position_code = 'G'"
         )
-        cursor = db_connect.cursor()
-        cursor.execute(cmd)
-        for id in cursor.fetchall():
+        select_results = sql_select(db_connect, cmd, True)
+        for id in select_results:
             player_list.append(id[0])
-        cursor.close()
-        db_connect.rollback()
     else:
         # get stats for player IDs listed in config file
         player_list = stats_playersByYear.split()
