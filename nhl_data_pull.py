@@ -455,7 +455,7 @@ def _skaterStats_yearByYear():
     or Defenseman).
     '''
 
-    if stats_playersByYear == 'ALL':
+    if stats_skatersByYear == 'ALL':
         # get stats for all skaters in team_players table
         player_list = []
         # make sure we don't include goalies
@@ -469,7 +469,7 @@ def _skaterStats_yearByYear():
             player_list.append(id[0])
     else:
         # get stats for player IDs listed in config file
-        player_list = stats_playersByYear.split()
+        player_list = stats_skatersByYear.split()
     
     for player_id in player_list:
         # create a link to pull yearByYear stats for each player in list
@@ -625,7 +625,7 @@ def _goalieStats_yearByYear():
             player_list.append(id[0])
     else:
         # get stats for player IDs listed in config file
-        player_list = stats_playersByYear.split()
+        player_list = stats_goaliesByYear.split()
 
     for player_id in player_list:
         # create link to player's yearByYear stats page
@@ -902,7 +902,7 @@ if __name__ == '__main__':
     # setup stats API endpoints from config file
     stats_list = config['STATS']['LIST']
     stats_byYear = config['STATS']['yearByYear']
-    stats_playersByYear = config['STATS']['playersByYear']
+    stats_skatersByYear = config['STATS']['skatersByYear']
     stats_goaliesByYear = config['STATS']['goaliesByYear']
 
     # get database credentials from config file
