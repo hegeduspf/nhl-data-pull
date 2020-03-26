@@ -27,7 +27,7 @@ from configparser import ConfigParser
 from datetime import datetime
 from pprint import pprint
 
-def open_logs():
+def open_logs(logs):
     '''
     Create a log file and setup parameters.
     '''
@@ -35,7 +35,7 @@ def open_logs():
     # create log filename with timestamp
     now = datetime.now()
     date_format = now.strftime("%d%b%y_%H%M%S")
-    log_file = f"/home/phegedus/LOGS/nhl_data_pull_{date_format}.log"
+    log_file = f"{logs}/nhl_data_pull_{date_format}.log"
 
     # create and configure logger
     logging.basicConfig(filename=log_file,
@@ -879,17 +879,18 @@ if __name__ == '__main__':
     args = argsetup()
     conf_file = args.configf
 
+    # read in configuration file
+    config = ConfigParser()
+    config.read(conf_file)
+
     # setup and test logging
-    log_file = open_logs()
+    log_dir = config['DEFAULT']['LOGDIR']
+    log_file = open_logs(log_dir)
     now = datetime.now().strftime("%d%b%Y %H:%M:%S")
     try:
         log_file.info(f"Starting NHL Data Pull at {now}...")
     except:
         sys.exit(f"Logging failed to setup...exiting at time {now}...")
-
-    # read in configuration file
-    config = ConfigParser()
-    config.read(conf_file)
 
     # setup environment variables from config file
     log_file.info('Setting up environment variables from config file...')

@@ -55,6 +55,8 @@ Contains default settings that every subsequent section within the config file w
 Set to NONE by default. LIST is used by the program to determine if a particular section should be run or not. Can additionally be set to ALL, in which case every section will be run.
 ###### SEASON ######
 Used to set the current NHL season when running the program. Should be in the following format: '20192020'.
+###### LOGDIR ######
+Directory path where the logs are stored when the program is run. Default setting is '{HOME}/logs', but can/should be changed to whatever location is best suited to the user.
 
 #### DATABASE ####
 Contains the settings needed by the Psycopg2 Connector to establish a connection to the database in the program. All settings have default values set in nhl-data-pull/config/nhl_data.ini, so user must update this section accordingly if database parameters are not setup to match.
