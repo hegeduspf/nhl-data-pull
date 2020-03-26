@@ -32,6 +32,20 @@ def open_logs(logs):
     Create a log file and setup parameters.
     '''
     
+    # check if log directory from config file exists
+    log_check = os.path.isdir(logs)
+
+    # create the directory if it doesn't exist
+    if not log_check:
+        try:
+            os.makedirs(logs)
+        except:
+            # couldn't create dir; default to {HOME}/logs
+            home_dir = os.path.expanduser('~')
+            logs = f"{home_dir}/logs"
+            if not os.path.isdir(logs):
+                os.makedirs(logs)
+
     # create log filename with timestamp
     now = datetime.now()
     date_format = now.strftime("%d%b%y_%H%M%S")
@@ -800,6 +814,9 @@ def _team_players_check(player, team, season, active, seq):
         f"= {team} AND season = $${season}$$ AND sequence = {seq})"
     )
     check = sql_select(db_connect, cmd, False)
+    # SQL command we run only returns True/False, so we have to parse that 
+    # out of the tuple returned by psycopg's cursor.fetchone()
+    check = check[0]
 
     if not check:
         # record doesn't exist in team_players; create it ourselves now
