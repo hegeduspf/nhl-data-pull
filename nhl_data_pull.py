@@ -316,7 +316,8 @@ def _players(url, team_ids):
 
             # parse out specific data we need for the database
             player_id = dataset['id']
-            name = dataset['fullName']
+            first_name = dataset['fullName'].split()[0]
+            last_name = dataset['fullName'].split()[1]
             link = dataset['link']
             age = dataset['currentAge']
             nationality = dataset['nationality']
@@ -346,10 +347,11 @@ def _players(url, team_ids):
             if players_check:
                 # record exists for that player, just update the data
                 log_file.info(f"> Existing record found, updating NHL Player "
-                    f"data for {name} ({player_id})...")
+                    f"data for {last_name} ({player_id})...")
                 players_update_cmd = (
-                    f"UPDATE players SET id = {player_id}, full_name = "
-                    f"$${name}$$, link = $${link}$$, current_age = {age}, "
+                    f"UPDATE players SET id = {player_id}, first_name = "
+                    f"$${first_name}$$, last_name = $${last_name}$$, "
+                    f"link = $${link}$$, current_age = {age}, "
                     f"nationality = $${nationality}$$, active = {active}, "
                     f"rookie = {rookie}, shoots_catches = "
                     f"$${shoots_catches}$$, position_code = "
@@ -362,15 +364,16 @@ def _players(url, team_ids):
             else:
                 # did not find a record for that player, insert new one
                 log_file.info(f"> No record found, inserting NHL Player data "
-                    f"for {name} ({player_id})...")
+                    f"for {last_name} ({player_id})...")
                 players_insert_cmd = (
-                    f"INSERT INTO players (id, full_name, link, current_age, "
-                    f"nationality, active, rookie, shoots_catches, "
-                    f"position_code, position_name, position_type) VALUES "
-                    f"({player_id}, $${name}$$, $${link}$$, {age}, "
-                    f"$${nationality}$$, {active}, {rookie}, "
-                    f"$${shoots_catches}$$, $${position_code}$$, "
-                    f"$${position_name}$$, $${position_type}$$)"
+                    f"INSERT INTO players (id, first_name, last_name, link, "
+                    f"current_age, nationality, active, rookie, "
+                    f"shoots_catches, position_code, position_name, "
+                    f"position_type) VALUES ({player_id}, $${first_name}$$, "
+                    f"$${last_name}$$, $${link}$$, {age}, $${nationality}$$, "
+                    f"{active}, {rookie}, $${shoots_catches}$$, "
+                    f"$${position_code}$$ ,$${position_name}$$, "
+                    f"$${position_type}$$)"
                 )
                 # insert the new player data into the database
                 players_status = sql_insert(db_connect, players_insert_cmd)
@@ -391,7 +394,7 @@ def _players(url, team_ids):
                 # record exists, just update the data
                 log_file.info(
                     f"> Existing record found, updating team_players data for "
-                    f"{name} ({player_id})'s {season} season with the "
+                    f"{last_name} ({player_id})'s {season} season with the "
                     f"{team_name} ({team_id})..."
                 )
                 team_players_update_cmd = (
@@ -408,7 +411,7 @@ def _players(url, team_ids):
                 # did not find a corresponding record in team_players table
                 log_file.info(
                     f"> No record found, inserting data into team_players for"
-                    f"{name} ({player_id})'s {season} season with the "
+                    f"{last_name} ({player_id})'s {season} season with the "
                     f"{team_name} ({team_id})..."
                 )
                 team_players_insert_cmd = (
@@ -423,10 +426,10 @@ def _players(url, team_ids):
 
             # log successful upload; already logging database errors
             if players_status == 0:
-                log_file.info(f">> Successfully uploaded data for {name} "
+                log_file.info(f">> Successfully uploaded data for {last_name} "
                     f"({player_id}) to players table...")
             if team_players_status == 0:
-                log_file.info(f">>> Uploaded data for {name} ({player_id}) "
+                log_file.info(f">>> Uploaded data for {last_name} ({player_id}) "
                     f"to team_players table...")
 
         log_file.info(f">> Completed player data pull for {team_name} "

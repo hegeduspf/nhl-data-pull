@@ -23,7 +23,8 @@ CREATE TABLE "teams" (
 
 CREATE TABLE "players" (
     "id" int PRIMARY KEY,
-    "full_name" varchar,
+    "first_name" varchar,
+    "last_name" varchar,
     "link" varchar,
     "current_age" int,
     "nationality" char(3),
