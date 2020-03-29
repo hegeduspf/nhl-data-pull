@@ -236,6 +236,10 @@ if __name__ == '__main__':
     # setup stats API endpoints from config file
     stats_byYear = config['STATS']['yearByYear']
 
+    # get list of junior leagues to look at
+    junior_leagues = config['JUNIORS']['LEAGUES']
+    junior_leagues = junior_leagues.split()
+
     # get database credentials from config file
     log_file.info('Setting database credentials from config file...')
     db_user = config['DATABASE']['USER']
@@ -248,6 +252,82 @@ if __name__ == '__main__':
     db_connect = database_connect()
 
     # pull data from {nhl_draft}/{draft_year}
+    draft_data = request_data(f"{nhl_draft}/{draft_year}")
+    
+    # remove copyright info
+    for key in draft_data.keys():
+        if key == 'drafts':
+            draft_data = draft_data[key][0]
+
+    # cycle through each round of the draft
+    draft_rounds = draft_data['rounds']
+    for rnd in draft_rounds:
+        # cycle through each pick of the round
+        for pick in rnd['picks']:
+            # select data points we need
+            rnd = pick['round']
+            rnd_pick = pick['pickInRound']
+            overall_pick = pick['pickOverall']
+            name = pick['prospect']['fullName']
+            link = pick['prospect']['link']
+            team_id = pick['team']['id']
+
+            log_file.info(f"Checking Junior numbers for {name}...")
+
+            # get prospect's individual info
+            prospect_link = f"{nhl_site}/{link}"
+            prospect_data = request_data(prospect_link)
+
+            # pdb.set_trace()
+            
+            # remove copyright
+            for key in prospect_data.keys():
+                if key == 'prospects':
+                    prospect_data = prospect_data[key][0]
+            
+            # get NHL Player ID to pull data for Junior seasons
+            prospect_id = prospect_data['id']
+            nhl_player_id = prospect_data['nhlPlayerId']
+            first_name = prospect_data['firstName']
+            last_name = prospect_data['lastName']
+            dob = prospect_data['birthDate']
+            height = prospect_data['height']
+            weight = prospect_data['weight']
+            shoots_catches = prospect_data['shootsCatches']
+            position = prospect_data['primaryPosition']['name']
+
+            # pull Junior season data for player
+            junior_link = f"{nhl_players}/{nhl_player_id}/{stats_byYear}"
+            season_data = request_data(junior_link)
+
+            # remove copyright and parse down to just the season by season data
+            for key in season_data.keys():
+                if key == 'stats':
+                    season_data = season_data[key][0]['splits']
+            
+            # cycle through player's seasons to parse out Junior hockey
+            for season in season_data:
+                # check if that season's stats are from a Junior league
+                league = season['league']['name']
+                if league in junior_leagues:
+                    # get junior numbers for this season
+                    player_id = nhl_player_id
+                    team_name = season['team']['name']
+                    year = season['season']
+                    sequence = season['sequenceNumber']
+                    games = season['stat']['games']
+                    goals = season['stat']['goals']
+                    assists = season['stat']['assists']
+                    points = season['stat']['points']
+                    pim = season['stat']['pim']
+
+                    # print results
+                    pprint(season)
+
+            # exit after first pick for testing
+            sys.exit()
+
+
     # cycle through each pick
         # get prospect id
         # pull data from {nhl_prospects}/id
