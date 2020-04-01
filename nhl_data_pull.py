@@ -479,7 +479,7 @@ def _skaterStats_yearByYear():
         cmd = (
             f"SELECT DISTINCT player_id FROM nhl_team_players "
             f"INNER JOIN nhl_players ON nhl_team_players.player_id = "
-            f"players.id WHERE players.position_code != 'G'"
+            f"nhl_players.id WHERE nhl_players.position_code != 'G'"
         )
         select_results = sql_select(db_connect, cmd, True)
         for id in select_results:
@@ -635,7 +635,7 @@ def _goalieStats_yearByYear():
         cmd = (
             f"SELECT DISTINCT player_id FROM nhl_team_players "
             f"INNER JOIN nhl_players ON nhl_team_players.player_id = "
-            f"players.id WHERE players.position_code = 'G'"
+            f"nhl_players.id WHERE nhl_players.position_code = 'G'"
         )
         select_results = sql_select(db_connect, cmd, True)
         for id in select_results:
