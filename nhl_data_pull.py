@@ -240,7 +240,7 @@ def _teams(url):
 
         # determine if a record exists for that team or not
         select_cmd = (
-            f"SELECT * FROM teams WHERE id = {team_id}"
+            f"SELECT * FROM nhl_teams WHERE id = {team_id}"
         )
         record_check = sql_select(db_connect, select_cmd, False)
         
@@ -251,7 +251,7 @@ def _teams(url):
                 f"for {team_name} ({team_id})...")
 
             update_cmd = (
-                f"UPDATE teams SET id = {team_id}, name = $${team_name}$$, "
+                f"UPDATE nhl_teams SET id = {team_id}, name = $${team_name}$$, "
                 f"abbreviation = $${abbreviation}$$, conf_id = "
                 f"{conference_id}, division_id = {division_id} "
                 f"WHERE id = {team_id}"
@@ -264,10 +264,10 @@ def _teams(url):
                 f"{team_name} ({team_id})...")
 
             insert_cmd = (
-                f"INSERT INTO teams (id, name, abbreviation, conf_id, division_id," 
-                f" franchise_id, active) VALUES ({team_id}, $${team_name}$$, "
-                f"$${abbreviation}$$, {conference_id}, {division_id}, "
-                f"{franchise_id}, {active})"
+                f"INSERT INTO nhl_teams (id, name, abbreviation, conf_id, "
+                f"division_id, franchise_id, active) VALUES ({team_id}, "
+                f"$${team_name}$$, $${abbreviation}$$, {conference_id}, "
+                f"{division_id}, {franchise_id}, {active})"
             )
             # insert the new team data into database
             status = sql_insert(db_connect, insert_cmd)
@@ -294,10 +294,10 @@ def _players(url, team_ids):
     # get roster from each team in database
     team_list = []
     if team_ids == 'ALL':
-        cmd = 'SELECT id, name FROM teams'
+        cmd = 'SELECT id, name FROM nhl_teams'
     else:
         cmd = (
-            f"SELECT id, name FROM teams "
+            f"SELECT id, name FROM nhl_teams "
             f"WHERE id IN({team_ids})"
         )
     # create list of team ids with database list
@@ -352,7 +352,7 @@ def _players(url, team_ids):
 
             # determine if a record exists for that player
             select_players_cmd = (
-                f"SELECT * FROM players WHERE id = {player_id}"
+                f"SELECT * FROM nhl_players WHERE id = {player_id}"
             )
             players_check = sql_select(
                 db_connect, select_players_cmd, False)
@@ -363,7 +363,7 @@ def _players(url, team_ids):
                 log_file.info(f"> Existing record found, updating NHL Player "
                     f"data for {last_name} ({player_id})...")
                 players_update_cmd = (
-                    f"UPDATE players SET id = {player_id}, first_name = "
+                    f"UPDATE nhl_players SET id = {player_id}, first_name = "
                     f"$${first_name}$$, last_name = $${last_name}$$, "
                     f"link = $${link}$$, dob = $${dob}$$, "
                     f"nationality = $${nationality}$$, active = {active}, "
@@ -380,8 +380,8 @@ def _players(url, team_ids):
                 log_file.info(f"> No record found, inserting NHL Player data "
                     f"for {last_name} ({player_id})...")
                 players_insert_cmd = (
-                    f"INSERT INTO players (id, first_name, last_name, link, "
-                    f"dob, nationality, active, rookie, shoots_catches, "
+                    f"INSERT INTO nhl_players (id, first_name, last_name, "
+                    f"link, dob, nationality, active, rookie, shoots_catches, "
                     f"position_code, position_name, position_type) VALUES "
                     f"({player_id}, $${first_name}$$, $${last_name}$$, "
                     f"$${link}$$, $${dob}$$, $${nationality}$$, "
@@ -395,8 +395,8 @@ def _players(url, team_ids):
             # determine if a corresponding record exists in the team_player
             # bridge table
             select_team_players_cmd = (
-                f"SELECT * FROM team_players WHERE player_id = {player_id} AND "
-                f"team_id = {team_id} AND season = $${season}$$ AND "
+                f"SELECT * FROM nhl_team_players WHERE player_id = {player_id} "
+                f"AND team_id = {team_id} AND season = $${season}$$ AND "
                 f"sequence = {sequence}"
             )
             team_players_check = sql_select(
@@ -412,7 +412,7 @@ def _players(url, team_ids):
                     f"{team_name} ({team_id})..."
                 )
                 team_players_update_cmd = (
-                    f"UPDATE team_players SET player_id = {player_id}, "
+                    f"UPDATE nhl_team_players SET player_id = {player_id}, "
                     f"team_id = {team_id}, season = $${season}$$, active = "
                     f"{active}, sequence = {sequence} WHERE player_id = "
                     f"{player_id} AND team_id = {team_id} AND season = "
@@ -429,9 +429,9 @@ def _players(url, team_ids):
                     f"{team_name} ({team_id})..."
                 )
                 team_players_insert_cmd = (
-                    f"INSERT INTO team_players (player_id, team_id, season, "
-                    f"active, sequence) VALUES ({player_id}, {team_id}, "
-                    f"$${season}$$, {active}, {sequence})"
+                    f"INSERT INTO nhl_team_players (player_id, team_id, "
+                    f"season, active, sequence) VALUES ({player_id}, "
+                    f"{team_id}, $${season}$$, {active}, {sequence})"
                 )
                 # insert the new team_players data into the database
                 team_players_status = sql_insert(
@@ -477,9 +477,9 @@ def _skaterStats_yearByYear():
         player_list = []
         # make sure we don't include goalies
         cmd = (
-            f"SELECT DISTINCT player_id FROM team_players "
-            f"INNER JOIN players ON team_players.player_id = players.id "
-            f"WHERE players.position_code != 'G'"
+            f"SELECT DISTINCT player_id FROM nhl_team_players "
+            f"INNER JOIN nhl_players ON nhl_team_players.player_id = "
+            f"players.id WHERE players.position_code != 'G'"
         )
         select_results = sql_select(db_connect, cmd, True)
         for id in select_results:
@@ -557,7 +557,7 @@ def _skaterStats_yearByYear():
 
             # determine if a record already exists for this skater/season
             select_cmd = (
-                f"SELECT * FROM skater_season_stats WHERE player_id = "
+                f"SELECT * FROM nhl_skater_stats WHERE player_id = "
                 f"{player_id} AND team_id = {team_id} AND season = "
                 f"$${season}$$ AND sequence = {sequence}"
             )
@@ -571,7 +571,7 @@ def _skaterStats_yearByYear():
                     f"{player_id}'s {season} NHL season..."
                 )
                 update_cmd = (
-                    f"UPDATE skater_season_stats SET player_id = {player_id}, "
+                    f"UPDATE nhl_skater_stats SET player_id = {player_id}, "
                     f"team_id = {team_id}, season = $${season}$$, "
                     f"time_on_ice = $${toi}$$, games = {games}, assists = "
                     f"{assists}, goals = {goals}, pim = {pim}, shots = "
@@ -595,7 +595,7 @@ def _skaterStats_yearByYear():
                     f"{player_id}'s {season} NHL season..."
                 )
                 insert_cmd = (
-                    f"INSERT INTO skater_season_stats (player_id, team_id, "
+                    f"INSERT INTO nhl_skater_stats (player_id, team_id, "
                     f"season, time_on_ice, games, assists, goals, pim, "
                     f"shots, hits, pp_goals, pp_points, pp_toi, even_toi, "
                     f"faceoff_pct, shot_pct, gw_goals, ot_goals, sh_goals, "
@@ -633,9 +633,9 @@ def _goalieStats_yearByYear():
         player_list = []
         # only include goalies
         cmd = (
-            f"SELECT DISTINCT player_id FROM team_players "
-            f"INNER JOIN players ON team_players.player_id = players.id "
-            f"WHERE players.position_code = 'G'"
+            f"SELECT DISTINCT player_id FROM nhl_team_players "
+            f"INNER JOIN nhl_players ON nhl_team_players.player_id = "
+            f"players.id WHERE players.position_code = 'G'"
         )
         select_results = sql_select(db_connect, cmd, True)
         for id in select_results:
@@ -729,7 +729,7 @@ def _goalieStats_yearByYear():
 
             # determine if a record already exists for this goalie/season
             select_cmd = (
-                f"SELECT * FROM goalie_season_stats WHERE player_id = "
+                f"SELECT * FROM nhl_goalie_stats WHERE player_id = "
                 f"{player_id} AND team_id = {team_id} AND season = "
                 f"$${season}$$ AND sequence = {sequence}"
             )
@@ -743,7 +743,7 @@ def _goalieStats_yearByYear():
                     f"{player_id}'s {season} NHL season..."
                 )
                 update_cmd = (
-                    f"UPDATE goalie_season_stats SET player_id = {player_id}, "
+                    f"UPDATE nhl_goalie_stats SET player_id = {player_id}, "
                     f"team_id = {team_id}, season = $${season}$$, "
                     f"time_on_ice = $${toi}$$, games = {games}, starts = "
                     f"{starts}, wins = {wins}, losses = {losses}, ties = "
@@ -767,7 +767,7 @@ def _goalieStats_yearByYear():
                     f"{player_id}'s {season} NHL season..."
                 )
                 insert_cmd = (
-                    f"INSERT INTO goalie_season_stats (player_id, team_id, "
+                    f"INSERT INTO nhl_goalie_stats (player_id, team_id, "
                     f"season, time_on_ice, games, starts, wins, losses, ties, "
                     f"ot_wins, shutouts, saves, pp_saves, sh_saves, "
                     f"even_saves, pp_shots, sh_shots, even_shots, save_pct, "
@@ -810,8 +810,8 @@ def _team_players_check(player, team, season, active, seq):
     # check if record in team_players exists that matches provided column data
     cmd = (
         f"SELECT EXISTS("
-        f"SELECT 1 FROM team_players WHERE player_id = {player} AND team_id "
-        f"= {team} AND season = $${season}$$ AND sequence = {seq})"
+        f"SELECT 1 FROM nhl_team_players WHERE player_id = {player} AND "
+        f"team_id = {team} AND season = $${season}$$ AND sequence = {seq})"
     )
     check = sql_select(db_connect, cmd, False)
     # SQL command we run only returns True/False, so we have to parse that 
@@ -821,9 +821,9 @@ def _team_players_check(player, team, season, active, seq):
     if not check:
         # record doesn't exist in team_players; create it ourselves now
         insert_cmd = (
-            f"INSERT INTO team_players (player_id, team_id, season, active, "
-            f"sequence) VALUES ({player}, {team}, $${season}$$, {active}, "
-            f"{seq})"
+            f"INSERT INTO nhl_team_players (player_id, team_id, season, "
+            f"active, sequence) VALUES ({player}, {team}, $${season}$$, "
+            f"{active}, {seq})"
         )
         insert_status = sql_insert(db_connect, insert_cmd)
         if insert_status == 0:

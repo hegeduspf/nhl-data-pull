@@ -2,17 +2,18 @@
 PostgreSQL table. */
 
 /* Drop Tables */
--- DROP TABLE junior_stats;
+-- DROP TABLE junior_skater_stats;
+-- DROP TABLE junior_goalie_stats;
 -- DROP TABLE nhl_draft;
--- DROP TABLE skater_season_stats;
--- DROP TABLE goalie_season_stats;
--- DROP TABLE team_players;
--- DROP TABLE players;
--- DROP TABLE teams;
+-- DROP TABLE nhl_skater_stats;
+-- DROP TABLE nhl_goalie_stats;
+-- DROP TABLE nhl_team_players;
+-- DROP TABLE nhl_players;
+-- DROP TABLE nhl_teams;
 
 /* Initial table creation */
 
-CREATE TABLE "teams" (
+CREATE TABLE "nhl_teams" (
     "id" int PRIMARY KEY,
     "name" varchar,
     "abbreviation" char(3),
@@ -22,7 +23,7 @@ CREATE TABLE "teams" (
     "active" boolean
 );
 
-CREATE TABLE "players" (
+CREATE TABLE "nhl_players" (
     "id" int PRIMARY KEY,
     "first_name" varchar,
     "last_name" varchar,
@@ -37,7 +38,7 @@ CREATE TABLE "players" (
     "position_type" char(20)
 );
 
-CREATE TABLE "team_players" (
+CREATE TABLE "nhl_team_players" (
     "player_id" int,
     "team_id" int,
     "season" char(8),
@@ -46,7 +47,7 @@ CREATE TABLE "team_players" (
     PRIMARY KEY ("player_id", "team_id", "season", "sequence")
 );
 
-CREATE TABLE "skater_season_stats" (
+CREATE TABLE "nhl_skater_stats" (
     "player_id" int,
     "team_id" int,
     "season" char(8),
@@ -76,7 +77,7 @@ CREATE TABLE "skater_season_stats" (
     PRIMARY KEY ("player_id", "team_id", "season", "sequence")
 );
 
-CREATE TABLE "goalie_season_stats" (
+CREATE TABLE "nhl_goalie_stats" (
     "player_id" int,
     "team_id" int,
     "season" char(8),
@@ -122,7 +123,7 @@ CREATE TABLE "nhl_draft" (
   UNIQUE ("draft_year", "overall_pick")
 );
 
-CREATE TABLE "junior_stats" (
+CREATE TABLE "junior_skater_stats" (
   "player_id" int,
   "season" char(8),
   "league" char(6),
@@ -135,10 +136,27 @@ CREATE TABLE "junior_stats" (
   PRIMARY KEY ("player_id", "season", "sequence")
 );
 
+CREATE TABLE "junior_goalie_stats" (
+  "player_id" int,
+  "season" char(8),
+  "league" char(6),
+  "games" int,
+  "wins" int,
+  "losses" int,
+  "ties" int,
+  "ot_wins" int,
+  "shutouts" int,
+  "goals_against" int,
+  "gaa" float,
+  "sequence" int,
+  PRIMARY KEY ("player_id", "season", "sequence")
+);
+
 /* Add foreign key references */
-ALTER TABLE "team_players" ADD FOREIGN KEY ("team_id") REFERENCES "teams" ("id");
-ALTER TABLE "team_players" ADD FOREIGN KEY ("player_id") REFERENCES "players" ("id");
-ALTER TABLE "skater_season_stats" ADD FOREIGN KEY ("player_id", "team_id", "season", "sequence") REFERENCES "team_players" ("player_id", "team_id", "season", "sequence");
-ALTER TABLE "goalie_season_stats" ADD FOREIGN KEY ("player_id", "team_id", "season", "sequence") REFERENCES "team_players" ("player_id", "team_id", "season", "sequence");
-ALTER TABLE "nhl_draft" ADD FOREIGN KEY ("nhl_player_id") REFERENCES "players" ("id");
-ALTER TABLE "junior_stats" ADD FOREIGN KEY ("player_id") REFERENCES "nhl_draft" ("nhl_player_id");
+ALTER TABLE "nhl_team_players" ADD FOREIGN KEY ("team_id") REFERENCES "nhl_teams" ("id");
+ALTER TABLE "nhl_team_players" ADD FOREIGN KEY ("player_id") REFERENCES "nhl_players" ("id");
+ALTER TABLE "nhl_skater_stats" ADD FOREIGN KEY ("player_id", "team_id", "season", "sequence") REFERENCES "nhl_team_players" ("player_id", "team_id", "season", "sequence");
+ALTER TABLE "nhl_goalie_stats" ADD FOREIGN KEY ("player_id", "team_id", "season", "sequence") REFERENCES "nhl_team_players" ("player_id", "team_id", "season", "sequence");
+ALTER TABLE "nhl_draft" ADD FOREIGN KEY ("nhl_player_id") REFERENCES "nhl_players" ("id");
+ALTER TABLE "junior_skater_stats" ADD FOREIGN KEY ("player_id") REFERENCES "nhl_draft" ("nhl_player_id");
+ALTER TABLE "junior_goalie_stats" ADD FOREIGN KEY ("player_id") REFERENCES "nhl_draft" ("nhl_player_id");
