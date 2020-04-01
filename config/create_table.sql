@@ -2,12 +2,13 @@
 PostgreSQL table. */
 
 /* Drop Tables */
+-- DROP TABLE junior_stats;
+-- DROP TABLE nhl_draft;
 -- DROP TABLE skater_season_stats;
 -- DROP TABLE goalie_season_stats;
 -- DROP TABLE team_players;
 -- DROP TABLE players;
 -- DROP TABLE teams;
-
 
 /* Initial table creation */
 
@@ -26,14 +27,14 @@ CREATE TABLE "players" (
     "first_name" varchar,
     "last_name" varchar,
     "link" varchar,
-    "current_age" int,
+    "dob" date,
     "nationality" char(3),
     "active" boolean,
     "rookie" boolean,
     "shoots_catches" char(1),
     "position_code" char(2),
-    "position_name" varchar,
-    "position_type" varchar
+    "position_name" char(20),
+    "position_type" char(20)
 );
 
 CREATE TABLE "team_players" (
@@ -104,8 +105,40 @@ CREATE TABLE "goalie_season_stats" (
     "sequence" int
 );
 
+CREATE TABLE "nhl_draft" (
+  "nhl_player_id" int PRIMARY KEY,
+  "draft_year" char(4),
+  "overall_pick" int,
+  "round_number" int,
+  "round_pick" int,
+  "team_id" int,
+  "prospect_id" int,
+  "first_name" varchar,
+  "last_name" varchar,
+  "dob" date,
+  "country" char(3),
+  "shoots" char(1),
+  "position" char(20),
+  UNIQUE ("draft_year", "overall_pick")
+);
+
+CREATE TABLE "junior_stats" (
+  "player_id" int,
+  "season" char(8),
+  "league" char(6),
+  "games" int,
+  "goals" int,
+  "assists" int,
+  "points" int,
+  "pim" int,
+  "sequence" int,
+  PRIMARY KEY ("player_id", "season", "sequence")
+);
+
 /* Add foreign key references */
 ALTER TABLE "team_players" ADD FOREIGN KEY ("team_id") REFERENCES "teams" ("id");
 ALTER TABLE "team_players" ADD FOREIGN KEY ("player_id") REFERENCES "players" ("id");
 ALTER TABLE "skater_season_stats" ADD FOREIGN KEY ("player_id", "team_id", "season", "sequence") REFERENCES "team_players" ("player_id", "team_id", "season", "sequence");
 ALTER TABLE "goalie_season_stats" ADD FOREIGN KEY ("player_id", "team_id", "season", "sequence") REFERENCES "team_players" ("player_id", "team_id", "season", "sequence");
+ALTER TABLE "nhl_draft" ADD FOREIGN KEY ("nhl_player_id") REFERENCES "players" ("id");
+ALTER TABLE "junior_stats" ADD FOREIGN KEY ("player_id") REFERENCES "nhl_draft" ("nhl_player_id");
