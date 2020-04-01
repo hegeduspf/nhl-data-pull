@@ -286,7 +286,7 @@ def _players(url, team_ids):
         - id                    
         - full_name             - rookie
         - link                  - shoots_catches
-        - current_age           - position_code
+        - dob                   - position_code
         - nationality           - position_name
         - active                - position_type
     '''
@@ -333,7 +333,7 @@ def _players(url, team_ids):
             first_name = dataset['fullName'].split()[0]
             last_name = dataset['fullName'].split()[1]
             link = dataset['link']
-            age = dataset['currentAge']
+            dob = dataset['birthDate']
             nationality = dataset['nationality']
             active = dataset['active']
             rookie = dataset['rookie']
@@ -365,7 +365,7 @@ def _players(url, team_ids):
                 players_update_cmd = (
                     f"UPDATE players SET id = {player_id}, first_name = "
                     f"$${first_name}$$, last_name = $${last_name}$$, "
-                    f"link = $${link}$$, current_age = {age}, "
+                    f"link = $${link}$$, dob = $${dob}$$, "
                     f"nationality = $${nationality}$$, active = {active}, "
                     f"rookie = {rookie}, shoots_catches = "
                     f"$${shoots_catches}$$, position_code = "
@@ -381,10 +381,10 @@ def _players(url, team_ids):
                     f"for {last_name} ({player_id})...")
                 players_insert_cmd = (
                     f"INSERT INTO players (id, first_name, last_name, link, "
-                    f"current_age, nationality, active, rookie, "
-                    f"shoots_catches, position_code, position_name, "
-                    f"position_type) VALUES ({player_id}, $${first_name}$$, "
-                    f"$${last_name}$$, $${link}$$, {age}, $${nationality}$$, "
+                    f"dob, nationality, active, rookie, shoots_catches, "
+                    f"position_code, position_name, position_type) VALUES "
+                    f"({player_id}, $${first_name}$$, $${last_name}$$, "
+                    f"$${link}$$, $${dob}$$, $${nationality}$$, "
                     f"{active}, {rookie}, $${shoots_catches}$$, "
                     f"$${position_code}$$ ,$${position_name}$$, "
                     f"$${position_type}$$)"
