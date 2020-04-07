@@ -131,6 +131,15 @@ CREATE TABLE "junior_skater_stats" (
   "goals" int,
   "assists" int,
   "points" int,
+  "pp_goals" int,
+  "gw_goals" int,
+  "sh_goals" int,
+  "faceoff_pct" float,
+  "time_on_ice" varchar,
+  "pp_toi" varchar,
+  "sh_toi" varchar,
+  "even_toi" varchar,
+  "plus_minus" int,
   "pim" int,
   "sequence" int,
   PRIMARY KEY ("player_id", "season", "sequence")
@@ -148,6 +157,9 @@ CREATE TABLE "junior_goalie_stats" (
   "shutouts" int,
   "goals_against" int,
   "gaa" float,
+  "shots_against" int,
+  "saves" int,
+  "save_pct" float,
   "sequence" int,
   PRIMARY KEY ("player_id", "season", "sequence")
 );
