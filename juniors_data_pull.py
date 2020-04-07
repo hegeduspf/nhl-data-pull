@@ -117,15 +117,23 @@ def request_data(url):
     '''
 
     log_file.info(f"Requesting data from {url}...")
-    for _ in range(3):
+    for i in range(3):
         try:
             r = requests.get(url)
             if r.status_code == 200:
                 # successful request, return data
                 log_file.info(
-                    f"Pulled data on {_ + 1} try from {url}..."
+                    f"Pulled data on {i + 1} try from {url}..."
                 )
                 return r.json()
+            else:
+                # bad request
+                if i == 2:
+                    # last attempt; return bad data if any
+                    log_file.info(
+                        f"Failed to pull data {i + 1} times from {url}..."
+                    )
+                    return r.json()
         except requests.exceptions.Timeout:
             # retry
             log_file.info(
@@ -204,6 +212,127 @@ def sql_select(conn, cmd, fetchall):
     cursor.close()
     return result
 
+def _nhl_player_check(player):
+    '''
+    Given an NHL Player's ID, check if they have a corresponding record in the
+    players table of the database.
+    '''
+
+    # check the players table in the database for record 
+    cmd = (
+        f"SELECT * FROM nhl_players WHERE id = {player}"
+    )
+    check = sql_select(db_connect, cmd, False)
+    if check:
+        # record exists for player in database
+        log_file.info(f">> Found matching NHL Player Profile for {player}...")
+        return 0
+    else:
+        # no record exists
+        log_file.info(f">> No NHL Player Profile found for {player}...")
+        return 1
+
+def _nhl_player_create(player):
+    '''
+    Create a player profile to add to the NHL players table in the database.
+    '''
+
+    # create link to NHL player profile
+    link = f"{nhl_players}/{player}"
+
+    # pull data for NHL player
+    data = request_data(link)
+
+    # remove copyright statement
+    for key in data.keys():
+        if key == 'people':
+            data = data[key][0]
+    
+    # setup data points
+    first_name = data.get('firstName', 'NULL')
+    last_name = data.get('lastName', 'NULL')   
+    link = data.get('link', 'NULL')
+    dob = data.get('birthDate', 'NULL')
+    nationality = data.get('nationality', 'NULL')
+    active = data.get('active', 'NULL')
+    rookie = data.get('rookie', 'NULL')
+    shoots_catches = data.get('shootsCatches', 'NULL')
+    position_code = data.get('primaryPosition').get('abbreviation', 'NULL')
+    position_name = data.get('primaryPosition').get('name', 'NULL')
+    position_type = data.get('primaryPosition').get('type', 'NULL')
+
+    # insert new record to players table
+    players_insert_cmd = (
+        f"INSERT INTO nhl_players (id, first_name, last_name, link, dob, "
+        f"nationality, active, rookie, shoots_catches, position_code, "
+        f"position_name, position_type) VALUES ({player}, $${first_name}$$, "
+        f"$${last_name}$$, $${link}$$, $${dob}$$, $${nationality}$$, "
+        f"{active}, {rookie}, $${shoots_catches}$$, "
+        f"$${position_code}$$ ,$${position_name}$$, "
+        f"$${position_type}$$)"
+    )
+    # insert the new player data into the database
+    status = sql_insert(db_connect, players_insert_cmd)
+
+    # log success
+    if status == 0:
+        log_file.info(f">> Created NHL Player profile for {player}...")
+        return 0
+    else:
+        return 1
+
+def _sequence_check(id, season, seq):
+    '''
+    Check whether a player, season, sequence instance exists in the database
+    already. If so, increment sequence and return new value. Otherwise, return
+    sequence as is.
+
+    In order to correctly parse out junior stats data and upload it to the
+    database, we need to distinguish between player instances with the same
+    sequence number.
+
+    Ex: Matt Auffrey's 2003-2004 season playing in juinors looks like:
+            [season]      [league]      [sequence]
+            20032004        U-18            1
+            20032004       WJ18-A           2
+            20032004        NAHL            2
+    '''
+
+    # log function start
+    log_file.info(f">>> Checking whether player {id}'s {season} season with "
+        f"sequence {seq} already exists in the database...")
+    
+    # check junior_skater_stats for record
+    skater_check_cmd = (
+        f"SELECT EXISTS("
+        f"SELECT 1 FROM junior_skater_stats WHERE player_id = {id} AND "
+        f"season = $${season}$$ AND sequence = {seq})"
+    )
+    skater_check = sql_select(db_connect, skater_check_cmd, False)
+    skater_check = skater_check[0]
+    
+    # check junior_goalie_stats for record
+    goalie_check_cmd = (
+        f"SELECT EXISTS("
+        f"SELECT 1 FROM junior_goalie_stats WHERE player_id = {id} AND "
+        f"season = $${season}$$ AND sequence = {seq})"
+    )
+    goalie_check = sql_select(db_connect, goalie_check_cmd, False)
+    goalie_check = goalie_check[0]
+
+    if skater_check or goalie_check:
+        # record already exists that player, season, and sequence
+        log_file.info(f">>> Found existing record for player {id}'s {season} "
+            f"season with sequence {seq}. New sequence number is {seq+1}..")
+        # increment sequence number
+        seq = seq + 1
+    else:
+        # record doesn't exist for that player, season, sequence
+        log_file.info(f">>> No record found for player {id}'s {season} season "
+            f"with sequnce {seq}...proceeding as normal...")
+        
+    return seq
+
 #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 if __name__ == '__main__':
@@ -252,6 +381,9 @@ if __name__ == '__main__':
     db_connect = database_connect()
 
     # pull data from {nhl_draft}/{draft_year}
+    log_file.info(f"Getting junior hockey data for prospects selected in "
+        f"{draft_year} NHL Entry Draft..."
+    )
     draft_data = request_data(f"{nhl_draft}/{draft_year}")
     
     # remove copyright info
@@ -265,36 +397,142 @@ if __name__ == '__main__':
         # cycle through each pick of the round
         for pick in rnd['picks']:
             # select data points we need
-            rnd = pick['round']
-            rnd_pick = pick['pickInRound']
-            overall_pick = pick['pickOverall']
-            name = pick['prospect']['fullName']
-            link = pick['prospect']['link']
-            team_id = pick['team']['id']
+            rnd = pick.get('round', 'NULL')
+            rnd_pick = pick.get('pickInRound', 'NULL')
+            overall_pick = pick.get('pickOverall', 'NULL')
+            name = pick.get('prospect').get('fullName', 'NULL')
+            link = pick.get('prospect').get('link', 'NULL')
+            team_id = pick.get('team').get('id', 'NULL')
+            team_name = pick.get('team').get('name', 'NULL')
+            prospect_id = pick.get('prospect').get('id', 'NULL')
+            
+            # reset nhl_player_id
+            nhl_player_id = 'NULL'
 
-            log_file.info(f"Checking Junior numbers for {name}...")
+            # get NHL Player ID to pull drafted player's info
+            log_file.info(f"> Getting NHL Player ID for {name}")
+            if prospect_id != 'NULL':
+                # check if prospect data has NHL Player ID
+                prospect_link = f"{nhl_site}/{link}"
+                prospect_data = request_data(prospect_link)
+                # remove copyright statement
+                for key in prospect_data.keys():
+                    if key == 'prospects':
+                        prospect_data = prospect_data[key][0]
+                nhl_player_id = prospect_data.get('nhlPlayerId', 'NULL')
+            
+            # track whether we need to skip a prospect because we can't find data
+            skip_prospect = False
 
-            # get prospect's individual info
-            prospect_link = f"{nhl_site}/{link}"
-            prospect_data = request_data(prospect_link)
+            # check whether we found NHL Player ID
+            if nhl_player_id == 'NULL':      
+                # couldn't find it, use previous draft pick to get current one's ID
+                log_file.info(f">> No prospect profile for {name}...generating "
+                    f"NHL Player ID using previous draft pick...")
+                # break variable for nested loops
+                breaking = False
+                for i in range(1, 4):
+                    select_previous_cmd = (
+                        f"SELECT nhl_player_id FROM nhl_draft "
+                        f"WHERE draft_year = $${draft_year}$$ AND "
+                        f"overall_pick = {overall_pick - i}"
+                    )
+                    previous_pick = sql_select(db_connect, select_previous_cmd, False)
 
+                    for j in range(1, i + 1):
+                        # essentially keep adding one to previous player id to find current one
+                        nhl_player_id = previous_pick[0] + j
+
+                        # check that name from NHL Player Profile matches draft pick we're looking at
+                        player_link = f"{nhl_players}/{nhl_player_id}"
+                        player_data = request_data(player_link)
+
+                        # remove copyright
+                        for key in player_data.keys():
+                            if key == 'people':
+                                player_data = player_data[key][0]
+                        
+                        # compare to name variable from draft data
+                        full_name = player_data.get('fullName', 'NULL NULL')
+                        full_name = full_name.split()
+                        temp_name = name.split()
+                        # some draft pick's names aren't capitalized to match their NHL profile
+                        # and some draft pick's first names are their written in their native language
+                        if full_name[1].upper() == temp_name[1].upper():
+                            # last name's match, check first names
+                            if full_name[0].upper() == temp_name[0].upper():
+                                # found correct nhl_player_id; break from both loops
+                                skip_prospect = False
+                                breaking = True
+                                break
+                            elif full_name[0][0] == temp_name[0][0]:
+                                # warn that first names don't match, but first letters do just
+                                # in case it's the wrong player
+                                log_file.warning(
+                                    f"WARNING: {name}'s first name doesn't "
+                                    f"match NHL Profile for {nhl_player_id} "
+                                    f"but first letter and last name's do..."
+                                )
+                                skip_prospect = False
+                                breaking = True
+                                break
+                            else:
+                                # same last name, but not same person
+                                skip_prospect = True
+                        else:
+                            # didn't find correct id; reset nhl_player_id
+                            skip_prospect = True
+
+                    # check whether to break from outer loop
+                    if breaking:
+                        break
+            
+            if skip_prospect:
+                # couldn't find nhl_player_id that matches draft pick; log error and skip to next pick
+                log_file.warning(f"WARNING: COULDN'T FIND A CORRESPONDING "
+                    f"PLAYER ID FOR {name}...MOVING TO NEXT PICK")
+                continue
+            
+            # get NHL Player profile data
+            player_link = f"{nhl_players}/{nhl_player_id}"
+            player_data = request_data(player_link)
+            # remove copyright
+            for key in player_data.keys():
+                if key == 'people':
+                    player_data = player_data[key][0]
+
+            # set data points using player data
+            first_name = player_data.get('firstName', 'NULL')
+            last_name = player_data.get('lastName', 'NULL')
+            dob = player_data.get('birthDate', 'NULL')
+            country = player_data.get('birthCountry', 'NULL')
+            shoots = player_data.get('shootsCatches', 'NULL')
+            position = player_data.get('primaryPosition').get('name', 'NULL')
+
+            # check if there's a corresponding NHL player profile in our database
+            check = _nhl_player_check(nhl_player_id)
+            if check == 1:
+                # no record found, create one. Must be done b/c of foreign key references
+                _nhl_player_create(nhl_player_id)
+
+            # insert draft data into nhl_draft table of database
+            draft_cmd = (
+                f"INSERT INTO nhl_draft (nhl_player_id, draft_year, "
+                f"overall_pick, round_number, round_pick, team_id, "
+                f"prospect_id, first_name, last_name, dob, country, shoots, "
+                f"position) VALUES ({nhl_player_id}, $${draft_year}$$, "
+                f"{overall_pick}, {rnd}, {rnd_pick}, {team_id}, {prospect_id}, "
+                f"$${first_name}$$, $${last_name}$$, $${dob}$$, $${country}$$, "
+                f"$${shoots}$$, $${position}$$)"
+            )
+            draft_status = sql_insert(db_connect, draft_cmd)
+            if draft_status == 0:
+                log_file.info(f"> Draft data stored for {draft_year} Round "
+                    f"{rnd} Pick {rnd_pick} - {first_name} {last_name}...")
+        
             # pdb.set_trace()
             
-            # remove copyright
-            for key in prospect_data.keys():
-                if key == 'prospects':
-                    prospect_data = prospect_data[key][0]
-            
-            # get NHL Player ID to pull data for Junior seasons
-            prospect_id = prospect_data['id']
-            nhl_player_id = prospect_data['nhlPlayerId']
-            first_name = prospect_data['firstName']
-            last_name = prospect_data['lastName']
-            dob = prospect_data['birthDate']
-            height = prospect_data['height']
-            weight = prospect_data['weight']
-            shoots_catches = prospect_data['shootsCatches']
-            position = prospect_data['primaryPosition']['name']
+            log_file.info(f">> Pulling Junior hockey seasons for {name}...")
 
             # pull Junior season data for player
             junior_link = f"{nhl_players}/{nhl_player_id}/{stats_byYear}"
@@ -308,34 +546,89 @@ if __name__ == '__main__':
             # cycle through player's seasons to parse out Junior hockey
             for season in season_data:
                 # check if that season's stats are from a Junior league
-                league = season['league']['name']
-                if league in junior_leagues:
-                    # get junior numbers for this season
-                    player_id = nhl_player_id
-                    team_name = season['team']['name']
-                    year = season['season']
-                    sequence = season['sequenceNumber']
-                    games = season['stat']['games']
-                    goals = season['stat']['goals']
-                    assists = season['stat']['assists']
-                    points = season['stat']['points']
-                    pim = season['stat']['pim']
+                league = season.get('league').get('name', 'NULL')
+                if league in junior_leagues and position != 'Goalie':
+                    # get junior skater numbers for this season
+                    year = season.get('season', 'NULL')
+                    sequence = season.get('sequenceNumber', 'NULL')
+                    games = season.get('stat').get('games', 'NULL')
+                    goals = season.get('stat').get('goals', 'NULL')
+                    assists = season.get('stat').get('assists', 'NULL')
+                    points = season.get('stat').get('points', 'NULL')
+                    pp_goals = season.get('stat').get('powerPlayGoals', 'NULL')
+                    gw_goals = season.get('stat').get('gameWinningGoals', 'NULL')
+                    sh_goals = season.get('stat').get('shortHandedGoals', 'NULL')
+                    faceoff_pct = season.get('stat').get('faceOffPct', 'NULL')
+                    time_on_ice = season.get('stat').get('timeOnIce', 'NULL')
+                    pp_toi = season.get('stat').get('powerPlayTimeOnIce', 'NULL')
+                    sh_toi = season.get('stat').get('shortHandedTimeOnIce', 'NULL')
+                    even_toi = season.get('stat').get('evenTimeOnIce', 'NULL')
+                    plus_minus = season.get('stat').get('plusMinus', 'NULL')
+                    pim = season.get('stat').get('pim', 'NULL')
 
-                    # print results
-                    pprint(season)
+                    # make sure sequence number isn't already being used this season
+                    sequence = _sequence_check(nhl_player_id, year, sequence)
 
-            # exit after first pick for testing
-            sys.exit()
+                    # generate SQL insert command for junior skater stats
+                    stats_cmd = (
+                        f"INSERT INTO junior_skater_stats (player_id, season, "
+                        f"league, games, goals, assists, points, pp_goals, "
+                        f"gw_goals, sh_goals, faceoff_pct, time_on_ice, "
+                        f"pp_toi, sh_toi, even_toi, plus_minus, pim, sequence) "
+                        f"VALUES ({nhl_player_id}, $${year}$$, $${league}$$, "
+                        f"{games}, {goals}, {assists}, {points}, {pp_goals}, "
+                        f"{gw_goals}, {sh_goals}, {faceoff_pct}, "
+                        f"$${time_on_ice}$$, $${pp_toi}$$, $${sh_toi}$$, "
+                        f"$${even_toi}$$, {plus_minus}, {pim}, {sequence})"
+                    )
+                elif league in junior_leagues and position == 'Goalie':
+                    # get Junior goalie stats for the season
+                    year = season.get('season', 'NULL')
+                    sequence = season.get('sequenceNumber', 'NULL')
+                    games = season.get('stat').get('games', 'NULL')
+                    wins = season.get('stat').get('wins', 'NULL')
+                    losses = season.get('stat').get('losses', 'NULL')
+                    ties = season.get('stat').get('ties', 'NULL')
+                    ot_wins = season.get('stat').get('ot', 'NULL')
+                    shutouts = season.get('stat').get('shutouts', 'NULL')
+                    goals_against = season.get('stat').get('goalsAgainst', 'NULL')
+                    gaa = season.get('stat').get('goalAgainstAverage', 'NULL')
+                    shots_against = season.get('stat').get('shotsAgainst', 'NULL')
+                    saves = season.get('stat').get('saves', 'NULL')
+                    save_pct = season.get('stat').get('savePercentage', 'NULL')
 
+                    # make sure sequence number isn't already being used this season
+                    sequence = _sequence_check(nhl_player_id, year, sequence)
 
-    # cycle through each pick
-        # get prospect id
-        # pull data from {nhl_prospects}/id
-        # get nhlPlayerId
-        # pull data from {nhl_players}/id/{stats_byYear}
-        # cycle through each season's data
-            # get all Junior years for North American players leading up to {draft_year} NHL Entry Draft
-            
+                    # generate SQL insert command for goalie junior stats
+                    stats_cmd = (
+                        f"INSERT INTO junior_goalie_stats (player_id, season, "
+                        f"league, games, wins, losses, ties, ot_wins, shutouts, "
+                        f"goals_against, gaa, shots_against, saves, save_pct, "
+                        f"sequence) VALUES ({nhl_player_id}, $${year}$$, "
+                        f"$${league}$$, {games}, {wins}, {losses}, {ties}, "
+                        f"{ot_wins}, {shutouts}, {goals_against}, {gaa}, "
+                        f"{shots_against}, {saves}, {save_pct}, {sequence})"
+                    )
+                else:
+                    # league either isn't a Junior league or isn't one we're looking at
+                    log_file.info(f">> Skipping {name}'s {season['season']} "
+                        f"season in the {league}...")
+                    # move on to next listed season
+                    continue
+
+                # insert Junior hockey data into junior_stats table
+                stats_status = sql_insert(db_connect, stats_cmd)
+                if stats_status == 0:
+                    log_file.info(f">> Added Junior season stats for {name}'s "
+                        f"{year} season in the {league}...")
+
+            # all Junior seasons should have been found by now
+            log_file.info(f">> Finished pulling Junior season stats for {name}...")
+
+    # close database connection
+    db_connect.close()
+
     # use all North American players drafted for that year to reproduce the Projectinator and rank their NHL performance projection
         # North American Leagues to include in analysis:
             # OHL, WHL, and QMJHL
