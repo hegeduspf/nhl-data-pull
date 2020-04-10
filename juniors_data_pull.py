@@ -24,6 +24,7 @@ import pdb
 #import matplotlib.pyplot as plt
 
 from configparser import ConfigParser
+from googlesearch import search
 from datetime import datetime
 from pprint import pprint
 
@@ -212,6 +213,47 @@ def sql_select(conn, cmd, fetchall):
     cursor.close()
     return result
 
+def get_player_id(name):
+    '''
+    Provided an NHL Player's name, return their NHL Player ID if they have one.
+
+    Input: NHL Player's name (first and last)
+    Output: NHL Player ID if found; NULL if not found
+    '''
+
+    log_file.info(f">>> Searching Google for {name}'s NHL Player ID...")
+    # search google for player name
+    query = name + ' NHL'
+    player_search = search(
+        query,
+        tld = 'com',
+        num = 10,
+        start = 0,
+        stop = 10,
+        pause = 2
+    )
+    nhl_link = None
+    for link in player_search:
+        # check if it's the NHL website, which is where we get the Player ID
+        if link.find('www.nhl.com/player') >= 0:
+            # found link that has player ID
+            nhl_link = link
+
+    log_file.info(f">>> Found link to {name}'s NHL Player Profile: {nhl_link}")
+
+    # only return id if found nhl site profile for player
+    if nhl_link:
+        # parse id out of the http link
+        nhl_link = nhl_link.split('/')
+        player_id = nhl_link[-1].split('-')
+        player_id = player_id[-1]
+        log_file.info(f">>> NHL Player ID found for {name}: {player_id}...")
+    else:
+        log_file.info(f">>> Couldn't find NHL Player ID for {name}...")
+        player_id = 'NULL'
+
+    return player_id
+
 def _nhl_player_check(player):
     '''
     Given an NHL Player's ID, check if they have a corresponding record in the
@@ -257,9 +299,14 @@ def _nhl_player_create(player):
     active = data.get('active', 'NULL')
     rookie = data.get('rookie', 'NULL')
     shoots_catches = data.get('shootsCatches', 'NULL')
-    position_code = data.get('primaryPosition').get('abbreviation', 'NULL')
-    position_name = data.get('primaryPosition').get('name', 'NULL')
-    position_type = data.get('primaryPosition').get('type', 'NULL')
+    try:
+        position_code = data.get('primaryPosition').get('abbreviation', 'NULL')
+        position_name = data.get('primaryPosition').get('name', 'NULL')
+        position_type = data.get('primaryPosition').get('type', 'NULL')
+    except:
+        position_code = 'NULL'
+        position_name = 'NULL'
+        position_type = 'NULL'
 
     # insert new record to players table
     players_insert_cmd = (
@@ -420,6 +467,12 @@ if __name__ == '__main__':
                     if key == 'prospects':
                         prospect_data = prospect_data[key][0]
                 nhl_player_id = prospect_data.get('nhlPlayerId', 'NULL')
+            else:
+                # search Google for player's ID from their NHL profile
+                nhl_player_id = get_player_id(name)
+                print(f"{name}'s NHL Player ID: {nhl_player_id}")
+                log_file.info(f">> Prospect ID was null for {name}...found "
+                    f"NHL Player ID on Google: {nhl_player_id}...")
             
             # track whether we need to skip a prospect because we can't find data
             skip_prospect = False
@@ -432,6 +485,12 @@ if __name__ == '__main__':
                 # break variable for nested loops
                 breaking = False
                 for i in range(1, 4):
+                    if overall_pick == 1:
+                        # first pick in draft; skip
+                        log_file.warning(f">> First pick in draft and no "
+                            f"prospect profile found...skipping...")
+                        skip_prospect = True
+                        break
                     select_previous_cmd = (
                         f"SELECT nhl_player_id FROM nhl_draft "
                         f"WHERE draft_year = $${draft_year}$$ AND "
@@ -441,7 +500,15 @@ if __name__ == '__main__':
 
                     for j in range(1, i + 1):
                         # essentially keep adding one to previous player id to find current one
-                        nhl_player_id = previous_pick[0] + j
+                        try:
+                            nhl_player_id = previous_pick[0] + j
+                        except:
+                            # couldn't find previous pick; move to next attempt
+                            log_file.info(
+                                f">> Failed to find previous pick on attempt "
+                                f"{j}...continuing with search...")
+                            skip_prospect = True
+                            continue
 
                         # check that name from NHL Player Profile matches draft pick we're looking at
                         player_link = f"{nhl_players}/{nhl_player_id}"
@@ -507,7 +574,10 @@ if __name__ == '__main__':
             dob = player_data.get('birthDate', 'NULL')
             country = player_data.get('birthCountry', 'NULL')
             shoots = player_data.get('shootsCatches', 'NULL')
-            position = player_data.get('primaryPosition').get('name', 'NULL')
+            try:
+                position = player_data.get('primaryPosition').get('name', 'NULL')
+            except:
+                position = 'NULL'
 
             # check if there's a corresponding NHL player profile in our database
             check = _nhl_player_check(nhl_player_id)
