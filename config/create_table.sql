@@ -107,7 +107,7 @@ CREATE TABLE "nhl_goalie_stats" (
 );
 
 CREATE TABLE "nhl_draft" (
-  "nhl_player_id" int,
+  "nhl_player_id" int PRIMARY KEY,
   "draft_year" char(4),
   "overall_pick" int,
   "round_number" int,
@@ -119,8 +119,7 @@ CREATE TABLE "nhl_draft" (
   "dob" date,
   "country" char(3),
   "shoots" char(1),
-  "position" char(20),
-  PRIMARY KEY ("nhl_player_id", "draft_year")
+  "position" char(20)
 );
 
 CREATE TABLE "junior_skater_stats" (
