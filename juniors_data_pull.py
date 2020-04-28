@@ -470,7 +470,6 @@ if __name__ == '__main__':
             else:
                 # search Google for player's ID from their NHL profile
                 nhl_player_id = get_player_id(name)
-                print(f"{name}'s NHL Player ID: {nhl_player_id}")
                 log_file.info(f">> Prospect ID was null for {name}...found "
                     f"NHL Player ID on Google: {nhl_player_id}...")
             
@@ -592,7 +591,8 @@ if __name__ == '__main__':
                 f"prospect_id, first_name, last_name, dob, country, shoots, "
                 f"position) VALUES ({nhl_player_id}, $${draft_year}$$, "
                 f"{overall_pick}, {rnd}, {rnd_pick}, {team_id}, {prospect_id}, "
-                f"$${first_name}$$, $${last_name}$$, $${dob}$$, $${country}$$, "
+                f"$${first_name}$$, $${last_name}$$, "
+                f"to_date($${dob}$$, 'YYYY-MM-DD'), $${country}$$, "
                 f"$${shoots}$$, $${position}$$)"
             )
             draft_status = sql_insert(db_connect, draft_cmd)
